@@ -185,7 +185,7 @@ def load_json_data(file_path, limit=20):
         return {i: res[i] for i in range(limit)}
 
 
-def load_mogit_dataset(file_path):
+def load_synthetic_dataset(file_path):
     import json
     from collections import defaultdict
 
@@ -202,7 +202,7 @@ def load_mogit_dataset(file_path):
 
 def cluster_analysis(file_name, limit):
     # clustered_data_pairs = load_json_data(file_name, limit)
-    clustered_data_pairs = load_mogit_dataset(file_name)
+    clustered_data_pairs = load_synthetic_dataset(file_name)
     print(f"[*] Loaded {len(clustered_data_pairs)} clusters from JSON data.")
     for key, pairs in clustered_data_pairs.items():
         print(f"[*] Analyzing cluster: {key} with {limit} pairs...")
@@ -221,4 +221,4 @@ def main():
 
 
 if __name__ == "__main__":
-    cluster_analysis("data/topicwise_pairs.json", 10)
+    cluster_analysis("data/topicwise_pairs.json", 30)
