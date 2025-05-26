@@ -59,20 +59,20 @@ class AttentionAnalyzer:
             "query_to_code": attention_matrix[
                 query_start:query_end, code_start:code_end
             ]
-            .sum()
+            .max()
             .item(),
             "code_to_query": attention_matrix[
                 code_start:code_end, query_start:query_end
             ]
-            .sum()
+            .max()
             .item(),
             "code_to_code": attention_matrix[code_start:code_end, code_start:code_end]
-            .sum()
+            .max()
             .item(),
             "query_to_query": attention_matrix[
                 query_start:query_end, query_start:query_end
             ]
-            .sum()
+            .max()
             .item(),
         }
 
@@ -185,14 +185,40 @@ def load_json_data(file_path, limit=20):
         return {i: res[i] for i in range(limit)}
 
 
-def main():
-    clustered_data_pairs = load_json_data("data/cluster.json", 2)
+def load_mogit_dataset(file_path):
+    import json
+    from collections import defaultdict
+
+    with open(file_path, "r") as f:
+        res = defaultdict(list)
+        for line in f:
+            data = json.loads(line)
+            res[data["domain"].lower().replace("/", "_")].append(
+                (data["query"], data["code"])
+            )
+
+    return res
+
+
+def cluster_analysis(file_name, limit):
+    # clustered_data_pairs = load_json_data(file_name, limit)
+    clustered_data_pairs = load_mogit_dataset(file_name)
     print(f"[*] Loaded {len(clustered_data_pairs)} clusters from JSON data.")
     for key, pairs in clustered_data_pairs.items():
-        print(f"[*] Analyzing cluster {key} with {len(pairs)} pairs...")
+        print(f"[*] Analyzing cluster: {key} with {limit} pairs...")
         analyzer = AttentionAnalyzer()
-        analyzer.run(pairs, output_dir=f"output/cluster_{key}")
+        analyzer.run(
+            pairs,
+            limit=limit,
+            output_dir=f"output/cluster_{key}",
+        )
+
+
+def main():
+    pairs = create_sample_data()
+    analyzer = AttentionAnalyzer()
+    analyzer.run(pairs, output_dir="output")
 
 
 if __name__ == "__main__":
-    main()
+    cluster_analysis("data/topicwise_pairs.json", 10)
