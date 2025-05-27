@@ -45,6 +45,15 @@ class AttentionAnalyzer:
         return -torch.sum(prob * torch.log(prob + 1e-10)).item()
     
     def get_std(self, attention_matrix):
+        """
+        Calculate and return the standard deviation of the attention matrix.
+        
+        Args:
+            attention_matrix (torch.Tensor): The attention matrix to analyze.
+        
+        Returns:
+            float: The standard deviation of the attention matrix.
+        """
         return attention_matrix.std().item()
 
     # more spread less sparsity
