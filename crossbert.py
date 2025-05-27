@@ -251,4 +251,4 @@ def main():
 
 
 if __name__ == "__main__":
-    cluster_analysis("data/topicwise_pairs.json", 30)
+    cluster_analysis("data/topicwise_pairs.json", 15)
