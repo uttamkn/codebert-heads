@@ -43,6 +43,9 @@ class AttentionAnalyzer:
         flat = attention_matrix.flatten()
         prob = flat / (flat.sum() + 1e-10)
         return -torch.sum(prob * torch.log(prob + 1e-10)).item()
+    
+    def get_std(self, attention_matrix):
+        return attention_matrix.std().item()
 
     # more spread less sparsity
     def get_sparsity(self, attention_matrix, threshold=0.01):
@@ -88,6 +91,7 @@ class AttentionAnalyzer:
         stats = {
             "entropy": np.zeros((num_layers, num_heads)),
             "sparsity": np.zeros((num_layers, num_heads)),
+            "std": np.zeros((num_layers, num_heads)),
             "query_to_code": np.zeros((num_layers, num_heads)),
             "code_to_query": np.zeros((num_layers, num_heads)),
             "code_to_code": np.zeros((num_layers, num_heads)),
@@ -96,11 +100,12 @@ class AttentionAnalyzer:
 
         for i in range(num_layers):
             for k in range(num_heads):
-                ent, sp, q2c, c2q, c2c, q2q = [], [], [], [], [], []
+                ent, sp, std, q2c, c2q, c2c, q2q = [], [], [], [], [], [], []
                 for j in range(batch_size):
                     matrix = attention_data[i][j][k]
                     ent.append(self.get_entropy(matrix))
                     sp.append(self.get_sparsity(matrix))
+                    std.append(self.get_std(matrix))
                     cross = self.cross_model_attn(matrix, sep_indices[j])
                     q2c.append(cross["query_to_code"])
                     c2q.append(cross["code_to_query"])
@@ -109,6 +114,7 @@ class AttentionAnalyzer:
 
                 stats["entropy"][i, k] = np.mean(ent)
                 stats["sparsity"][i, k] = np.mean(sp)
+                stats["std"][i, k] = np.mean(std)
                 stats["query_to_code"][i, k] = np.mean(q2c)
                 stats["code_to_query"][i, k] = np.mean(c2q)
                 stats["code_to_code"][i, k] = np.mean(c2c)
