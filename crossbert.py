@@ -54,7 +54,7 @@ class AttentionAnalyzer:
         Returns:
             float: The standard deviation of the attention matrix.
         """
-        return attention_matrix.std().item()
+        return attention_matrix.flatten().std().item()
 
     # more spread less sparsity
     def get_sparsity(self, attention_matrix, threshold=0.01):
