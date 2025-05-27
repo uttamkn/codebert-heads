@@ -55,6 +55,18 @@ class AttentionAnalyzer:
             float: The standard deviation of the attention matrix.
         """
         return attention_matrix.flatten().std().item()
+    
+    def get_max(self, attention_matrix: torch.Tensor):
+        """
+        Calculate and return the maximum value in the attention matrix.
+
+        Args:
+            attention_matrix (torch.Tensor): The attention matrix to analyze.
+        
+        Returns:
+            float: The maximum value in the attention matrix.
+        """
+        return attention_matrix.max().item()
 
     # more spread less sparsity
     def get_sparsity(self, attention_matrix, threshold=0.01):
@@ -101,6 +113,7 @@ class AttentionAnalyzer:
             "entropy": np.zeros((num_layers, num_heads)),
             "sparsity": np.zeros((num_layers, num_heads)),
             "std": np.zeros((num_layers, num_heads)),
+            "max": np.zeros((num_layers, num_heads)),
             "query_to_code": np.zeros((num_layers, num_heads)),
             "code_to_query": np.zeros((num_layers, num_heads)),
             "code_to_code": np.zeros((num_layers, num_heads)),
@@ -109,12 +122,13 @@ class AttentionAnalyzer:
 
         for i in range(num_layers):
             for k in range(num_heads):
-                ent, sp, std, q2c, c2q, c2c, q2q = [], [], [], [], [], [], []
+                ent, sp, std, max_, q2c, c2q, c2c, q2q = [], [], [], [], [], [], [], []
                 for j in range(batch_size):
                     matrix = attention_data[i][j][k]
                     ent.append(self.get_entropy(matrix))
                     sp.append(self.get_sparsity(matrix))
                     std.append(self.get_std(matrix))
+                    max_.append(self.get_max(matrix))
                     cross = self.cross_model_attn(matrix, sep_indices[j])
                     q2c.append(cross["query_to_code"])
                     c2q.append(cross["code_to_query"])
@@ -124,6 +138,7 @@ class AttentionAnalyzer:
                 stats["entropy"][i, k] = np.mean(ent)
                 stats["sparsity"][i, k] = np.mean(sp)
                 stats["std"][i, k] = np.mean(std)
+                stats["max"][i, k] = np.mean(max_)
                 stats["query_to_code"][i, k] = np.mean(q2c)
                 stats["code_to_query"][i, k] = np.mean(c2q)
                 stats["code_to_code"][i, k] = np.mean(c2c)
