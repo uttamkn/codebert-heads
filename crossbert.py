@@ -297,7 +297,7 @@ def load_synthetic_dataset(file_path, language="Python"):
         path=download_path,
         unzip=True,
     )
-    file_path = os.path.join(download_path, "{language}_unlabelled.json")
+    file_path = os.path.join(download_path, "{language}_unlabelled.jsonl")
 
     with open(file_path, "r") as f:
         res = defaultdict(list)
