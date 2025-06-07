@@ -23,7 +23,7 @@ class Output(BaseModel):
         return {"query": self.query, "code": self.code}
 
 
-LANGUAGES = ["Go", "Python", "JavaScript"]
+LANGUAGES = ["go", "python", "javascript"]
 
 CODE_DOMAINS = [
     "data structures and algorithms",
