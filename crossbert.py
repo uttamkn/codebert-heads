@@ -280,14 +280,29 @@ def create_sample_data(language="python"):
         ]
 
 
-def load_synthetic_dataset(file_path, language="python"):
-    import json
+def load_synthetic_dataset(file_path, language="Python"):
+    import orjson
     from collections import defaultdict
+    from kaggle.api.kaggle_api_extended import KaggleApi
+
+    api = KaggleApi()
+    api.authenticate()
+
+    download_path = "./data"
+    if not os.path.exists(download_path):
+        os.makedirs(download_path)
+
+    api.dataset_download_files(
+        "mohitnair512/synthetic-code-query-pairs-golang-js-and-python",
+        path=download_path,
+        unzip=True,
+    )
+    file_path = os.path.join(download_path, "{language}_unlabelled.json")
 
     with open(file_path, "r") as f:
         res = defaultdict(list)
         for line in f:
-            data = json.loads(line)
+            data = orjson.loads(line)
             res[data["domain"].lower().replace("/", "_")].append(
                 (data["query"], data["code"])
             )
@@ -485,10 +500,11 @@ def main():
                     )
                 ]
 
-        # Run cluster analysis with the selected models
+        # Run cluster analysis with the selected models # Change this line, the file name will turn out to be wrong
         cluster_analysis("topicwise_pairs.json", args.limit, models, args.output_dir)
         return  # Exit after clustered analysis
     elif args.data == "synthetic":
+        # here also, Change this line, the file name will turn out to be wrong
         data = load_synthetic_dataset("topicwise_pairs.json")
         if not data:
             print("[!] No synthetic data found or error loading data")

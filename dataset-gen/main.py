@@ -15,20 +15,29 @@ class Output(BaseModel):
     query: str
     code: str
 
+    def to_labelled_dict(self):
+        return self.model_dump()
+
+    def to_unlabelled_dict(self):
+        # Exclude the domain (topic) for unlabelled version
+        return {"query": self.query, "code": self.code}
+
+
+LANGUAGES = ["Go", "Python", "JavaScript"]
 
 CODE_DOMAINS = [
-    "Data Structures & Algorithms",
-    "Control Flow & Function Logic",
-    "Object-Oriented Programming",
-    "Web Server Code",
-    "Unit Testing",
-    "Data Analysis",
-    "File Handling",
-    "Machine Learning Code",
-    "Scientific and Mathematical Code",
-    "Image Processing Code",
-    "Database Operations",
-    "Network Programming",
+    "data structures and algorithms",
+    "control flow and function logic",
+    "object-oriented programming",
+    "web server code",
+    "unit testing",
+    "data analysis",
+    "file handling",
+    "machine learning code",
+    "scientific and mathematical code",
+    "image processing code",
+    "database operations",
+    "network programming",
 ]
 
 client = genai.Client(api_key=os.getenv("API_KEY"))
@@ -86,28 +95,53 @@ async def generate_code_query_pairs(
     return [Output(**item) for item in data]
 
 
-async def run_pipeline():
-    all_pairs = []
+async def write_to_file(file_path: str, data: List[dict]):
+    """Write data to file asynchronously"""
+    with open(file_path, "w", encoding="utf-8") as f:
+        for item in data:
+            f.write(orjson.dumps(item).decode("utf-8") + "\n")
+
+
+async def run_all_languages_pipeline():
+    output_dir = "code_query_pairs"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    all_language_pairs = {lang: [] for lang in LANGUAGES}
     num_batches = 6
 
-    for domain in CODE_DOMAINS:
-        print(f"Processing {domain}...")
-        domain_pairs = []
+    for language in LANGUAGES:
+        for domain in CODE_DOMAINS:
+            print(f"Processing {domain} for {language}...")
+            for i in range(num_batches):
+                batch = await generate_code_query_pairs(domain, language, 16)
+                all_language_pairs[language].extend(batch)
+                print(f"  {language} - {domain}: Batch {i + 1}/{num_batches} completed")
 
-        for i in range(num_batches):
-            batch = await generate_code_query_pairs(domain, "Python", 16)
-            domain_pairs.extend(batch)
-            print(f"  Batch {i + 1}/{num_batches} completed")
+    for language, pairs in all_language_pairs.items():
+        labelled_file_name = f"{language}_labelled.jsonl"
+        unlabelled_file_name = f"{language}_unlabelled.jsonl"
+        labelled_file_path = os.path.join(output_dir, labelled_file_name)
+        unlabelled_file_path = os.path.join(output_dir, unlabelled_file_name)
 
-        all_pairs.extend(domain_pairs)
-        print(f"✓ {domain}: {len(domain_pairs)} pairs")
+        labelled_data = [pair.to_labelled_dict() for pair in pairs]
+        unlabelled_data = [pair.to_unlabelled_dict() for pair in pairs]
 
-    with open("topicwise_pairs.json", "w", encoding="utf-8") as f:
-        for pair in all_pairs:
-            f.write(orjson.dumps(pair.model_dump()).decode("utf-8") + "\n")
+        await write_to_file(labelled_file_path, labelled_data)
+        await write_to_file(unlabelled_file_path, unlabelled_data)
 
-    print(f"\n🎉 Generated {len(all_pairs)} total pairs in topicwise_pairs.json")
+        print(
+            f"✓ {language}: {len(pairs)} labelled pairs written to {labelled_file_path}"
+        )
+        print(
+            f"✓ {language}: {len(pairs)} unlabelled pairs written to {unlabelled_file_path}"
+        )
+
+    print(
+        f"\n🎉 Generated labelled and unlabelled pairs for all {len(LANGUAGES)} languages"
+    )
+    print(f"Files saved in '{output_dir}' directory")
 
 
 if __name__ == "__main__":
-    asyncio.run(run_pipeline())
+    asyncio.run(run_all_languages_pipeline())
