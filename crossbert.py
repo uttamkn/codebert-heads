@@ -185,7 +185,7 @@ class AttentionAnalyzer:
             plt.savefig(file_path)
             plt.close()
 
-    def run(self, pairs, output_dir="output", limit=30, data_source="code_search_net"):
+    def run(self, pairs, output_dir="output", limit=30):
         print(
             f"[*] Analyzing with model: {self.model_config.name} ({self.model_config.language})"
         )
@@ -353,9 +353,9 @@ def cluster_analysis(language, limit, models, output_dir="output"):
                 print(f"  [+] Analyzing with model: {model.name}")
                 analyzer = AttentionAnalyzer(model)
                 stats, model_output_dir = analyzer.run(
-                    cluster_pairs[:limit],
+                    cluster_pairs,
                     output_dir=cluster_output_dir,
-                    data_source=data_source,
+                    limit=limit,
                 )
 
                 model_key = f"{model.name} ({language})"
@@ -391,6 +391,7 @@ def cluster_analysis(language, limit, models, output_dir="output"):
 
 def compare_models(
     models_configs,
+    limit,
     data,
     output_dir="output",
     data_source="code_search_net",
@@ -417,9 +418,7 @@ def compare_models(
     # Run analysis for each model in this language group
     for config in models_configs:
         analyzer = AttentionAnalyzer(config)
-        stats, model_output_dir = analyzer.run(
-            data, output_dir=lang_dir, data_source=data_source
-        )
+        stats, model_output_dir = analyzer.run(data, output_dir=lang_dir, limit=limit)
 
         model_key = f"{config.name} ({config.language})"
         all_stats[model_key] = {
@@ -638,7 +637,8 @@ def main():
     # Run comparison
     compare_models(
         models,
-        data[: args.limit],
+        limit=args.limit,
+        data=data,
         output_dir=args.output_dir,
         data_source=args.data,
         language=args.language,
