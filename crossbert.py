@@ -43,6 +43,7 @@ class AttentionAnalyzer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(self.device)
 
+    # TODO: Improve this
     def preprocess(
         self, pairs: List[Tuple[str, str]], limit: int = 512, max_len: int = 256
     ):
@@ -184,20 +185,18 @@ class AttentionAnalyzer:
             plt.savefig(file_path)
             plt.close()
 
-    def run(self, pairs, output_dir="output", limit=30):
+    def run(self, pairs, output_dir="output", limit=30, data_source="code_search_net"):
         print(
             f"[*] Analyzing with model: {self.model_config.name} ({self.model_config.language})"
         )
         print(f"[*] Preprocessing {min(len(pairs), limit)} pairs...")
 
-        # Create output directory with model name
-        model_output_dir = os.path.join(
-            output_dir, self.model_config.name.replace("/", "_")
-        )
+        # Create output directory structure: output_dir/data_source/language/model_name
+        model_name = self.model_config.name.replace("/", "_")
         if self.model_config.is_finetuned:
-            model_output_dir = os.path.join(
-                output_dir, f"{self.model_config.language}_finetuned"
-            )
+            model_name = f"{self.model_config.language}_finetuned"
+
+        model_output_dir = os.path.join(output_dir, model_name)
         os.makedirs(model_output_dir, exist_ok=True)
 
         # Process the data
@@ -214,7 +213,13 @@ class AttentionAnalyzer:
         # Save stats to JSON for later comparison
         stats_path = os.path.join(model_output_dir, "attention_stats.json")
         with open(stats_path, "w") as f:
-            json.dump({k: v.tolist() for k, v in stats.items()}, f)
+            json.dump(
+                {
+                    k: v.tolist() if hasattr(v, "tolist") else v
+                    for k, v in stats.items()
+                },
+                f,
+            )
 
         # Generate visualizations
         self.plot_heatmaps(stats, output_dir=model_output_dir)
@@ -280,7 +285,7 @@ def create_sample_data(language="python"):
         ]
 
 
-def load_synthetic_dataset(file_path, language="Python"):
+def load_synthetic_dataset(language="Python"):
     import orjson
     from collections import defaultdict
     from kaggle.api.kaggle_api_extended import KaggleApi
@@ -297,7 +302,7 @@ def load_synthetic_dataset(file_path, language="Python"):
         path=download_path,
         unzip=True,
     )
-    file_path = os.path.join(download_path, "{language}_unlabelled.jsonl")
+    file_path = os.path.join(download_path, f"{language.lower()}_labelled.jsonl")
 
     with open(file_path, "r") as f:
         res = defaultdict(list)
@@ -310,93 +315,173 @@ def load_synthetic_dataset(file_path, language="Python"):
     return res
 
 
-def cluster_analysis(file_name, limit, models, output_dir="output"):
+def cluster_analysis(language, limit, models, output_dir="output"):
     """
     Analyze clusters of code pairs using the specified models.
 
     Args:
-        file_name: Path to the file containing clustered data
+        language: Programming language
         limit: Maximum number of pairs to process per cluster
         models: List of ModelConfig objects to use for analysis
         output_dir: Base directory for output
+
+    Returns:
+        Dictionary containing analysis results for all clusters
     """
-    clustered_data_pairs = load_synthetic_dataset(file_name)
+    clustered_data_pairs = load_synthetic_dataset(language)
     if not clustered_data_pairs:
         print("[!] No clustered data found or error loading data")
-        return []
+        return {}
 
     print(f"[*] Loaded {len(clustered_data_pairs)} clusters from JSON data.")
-
     all_cluster_results = {}
+    data_source = "synthetic"
 
-    for cluster_key, pairs in clustered_data_pairs.items():
-        print(
-            f"\n[*] Analyzing cluster: {cluster_key} with {min(len(pairs), limit)} pairs..."
+    for cluster_key, cluster_pairs in clustered_data_pairs.items():
+        print(f"\n[*] Processing cluster: {cluster_key}")
+
+        # Create output directory for this cluster
+        cluster_output_dir = os.path.join(
+            output_dir, data_source, language, f"cluster_{cluster_key}"
         )
-        cluster_output_dir = os.path.join(output_dir, f"cluster_{cluster_key}")
+        os.makedirs(cluster_output_dir, exist_ok=True)
 
-        # Run analysis for this cluster with all models
         cluster_results = {}
+
         for model in models:
-            print(f"  - Using model: {model.name} ({model.language})")
-            analyzer = AttentionAnalyzer(model)
             try:
+                print(f"  [+] Analyzing with model: {model.name}")
+                analyzer = AttentionAnalyzer(model)
                 stats, model_output_dir = analyzer.run(
-                    pairs,
-                    limit=limit,
-                    output_dir=os.path.join(cluster_output_dir, model.language),
+                    cluster_pairs[:limit],
+                    output_dir=cluster_output_dir,
+                    data_source=data_source,
                 )
-                cluster_results[model.name] = {
+
+                model_key = f"{model.name} ({language})"
+                cluster_results[model_key] = {
                     "stats": stats,
                     "output_dir": model_output_dir,
                     "config": model.__dict__,
+                    "language": language,
+                    "model_name": model.name,
+                    "cluster": cluster_key,
                 }
             except Exception as e:
                 print(f"    [!] Error analyzing with {model.name}: {str(e)}")
 
         all_cluster_results[cluster_key] = cluster_results
 
-        # Generate comparison plots for this cluster
-        if len(cluster_results) > 1:  # Only compare if we have multiple models
-            plot_comparison(cluster_results, cluster_output_dir)
+        # Generate comparison plots for this cluster if we have multiple models
+        if len(cluster_results) > 1:
+            try:
+                # Create comparison directory inside the language directory
+                cluster_comp_dir = os.path.join(cluster_output_dir, "comparison")
+                os.makedirs(cluster_comp_dir, exist_ok=True)
+
+                plot_comparison(cluster_results, cluster_comp_dir)
+                print(f"  [+] Comparison visualizations saved to: {cluster_comp_dir}")
+            except Exception as e:
+                print(
+                    f"  [!] Error generating comparison visualizations for cluster {cluster_key}: {str(e)}"
+                )
 
     return all_cluster_results
 
 
-def compare_models(models_configs, data, output_dir="output/comparison"):
-    """Compare attention patterns across multiple models."""
-    os.makedirs(output_dir, exist_ok=True)
+def compare_models(
+    models_configs,
+    data,
+    output_dir="output",
+    data_source="code_search_net",
+    language="python",
+):
+    """Compare attention patterns across multiple models.
+
+    Args:
+        models_configs: List of model configurations
+        data: Input data for analysis
+        output_dir: Base output directory
+        data_source: Source of the data (e.g., 'code_search_net', 'synthetic')
+        language: Programming language
+
+    Returns:
+        Dictionary containing analysis results for all models
+    """
     all_stats = {}
 
-    # Run analysis for each model
+    # Create base directory for this language's models
+    lang_dir = os.path.join(output_dir, data_source, language)
+    os.makedirs(lang_dir, exist_ok=True)
+
+    # Run analysis for each model in this language group
     for config in models_configs:
         analyzer = AttentionAnalyzer(config)
-        stats, model_output_dir = analyzer.run(data, output_dir=output_dir)
-        all_stats[config.name] = {
+        stats, model_output_dir = analyzer.run(
+            data, output_dir=lang_dir, data_source=data_source
+        )
+
+        model_key = f"{config.name} ({config.language})"
+        all_stats[model_key] = {
             "stats": stats,
             "output_dir": model_output_dir,
             "config": config.__dict__,
+            "language": config.language,
+            "model_name": config.name,
         }
 
-    # Generate comparison visualizations
-    plot_comparison(all_stats, output_dir)
+    # Generate comparison visualizations for each language group if we have multiple models
+    if len(models_configs) > 1:
+        # Create comparison directory inside the language directory
+        lang_comp_dir = os.path.join(lang_dir, "comparison")
+        os.makedirs(lang_comp_dir, exist_ok=True)
+
+        # Plot comparison visualizations
+        try:
+            plot_comparison(all_stats, lang_comp_dir)
+            print(f"[+] Comparison visualizations saved to: {lang_comp_dir}")
+        except Exception as e:
+            print(f"[!] Error generating comparison visualizations: {str(e)}")
 
     return all_stats
 
 
 def plot_comparison(all_stats, output_dir):
     """Generate comparison plots across models."""
-    metrics = ["entropy", "sparsity", "std", "max", "query_to_code", "code_to_query"]
+    metrics = [
+        "entropy",
+        "sparsity",
+        "std",
+        "max",
+        "query_to_code",
+        "code_to_query",
+        "code_to_code",
+        "query_to_query",
+    ]
 
     for metric in metrics:
         plt.figure(figsize=(12, 6))
+        has_data = False
 
         for model_name, data in all_stats.items():
             stats = data["stats"]
-            if metric in stats:
-                # Take mean across all layers and heads for this metric
-                mean_values = np.mean(stats[metric], axis=(0, 1))
-                plt.plot(mean_values, label=f"{model_name}")
+            if (
+                metric in stats and stats[metric].size > 0
+            ):  # Check if metric exists and has data
+                try:
+                    # Take mean across all heads for each layer
+                    mean_values = np.mean(
+                        stats[metric], axis=1
+                    )  # Mean across heads per layer
+                    plt.plot(mean_values, label=f"{model_name}")
+                    has_data = True
+                except Exception as e:
+                    print(f"Error plotting {metric} for {model_name}: {e}")
+
+        if not has_data:
+            print(f"No data available for metric: {metric}")
+            plt.close()
+            continue
 
         plt.title(f"Comparison of {metric} across models")
         plt.xlabel("Layer")
@@ -409,32 +494,43 @@ def plot_comparison(all_stats, output_dir):
         plt.close()
 
 
-def load_finetuned_models(base_dir="model"):
-    """Load all available fine-tuned models from the model directory."""
+def load_models_for_language(language, base_dir="model"):
+    """
+    Load the base CodeBERT model and its fine-tuned version for the specified language.
+
+    Args:
+        language: Target programming language (e.g., 'python', 'javascript')
+        base_dir: Directory containing fine-tuned models
+
+    Returns:
+        List of ModelConfig objects: [base_model, finetuned_model] if both exist,
+        or just the base model if no fine-tuned version is found.
+    """
     models = []
     base_path = Path(base_dir)
 
-    # Add base CodeBERT model
-    models.append(
-        ModelConfig(
-            name="microsoft/codebert-base",
-            path="microsoft/codebert-base",
-            is_finetuned=False,
-            language="multilingual",
-        )
+    # Always add base CodeBERT model
+    base_model = ModelConfig(
+        name="microsoft/codebert-base",
+        path="microsoft/codebert-base",
+        is_finetuned=False,
+        language="multilingual",
     )
+    models.append(base_model)
 
-    # Look for language-specific fine-tuned models
-    for lang_dir in base_path.iterdir():
-        if lang_dir.is_dir() and (lang_dir / "config.json").exists():
-            models.append(
-                ModelConfig(
-                    name=f"codebert-{lang_dir.name}",
-                    path=str(lang_dir),
-                    is_finetuned=True,
-                    language=lang_dir.name,
-                )
+    # Look for fine-tuned model for the specified language
+    lang_dir = base_path / language
+    if lang_dir.exists() and (lang_dir / "config.json").exists():
+        models.append(
+            ModelConfig(
+                name=f"codebert-{language}",
+                path=str(lang_dir),
+                is_finetuned=True,
+                language=language,
             )
+        )
+    else:
+        print(f"[!] No fine-tuned model found for language: {language}")
 
     return models
 
@@ -446,14 +542,15 @@ def main():
     parser.add_argument(
         "--data",
         type=str,
-        default="sample",
+        default="code_search_net",
         choices=["sample", "code_search_net", "clustered", "synthetic"],
-        help="Data source for analysis ('sample': predefined samples, 'code_search_net': CodeSearchNet dataset, 'clustered': topic-clustered data, 'synthetic': topic-wise synthetic data)",
+        help="Data source for analysis ('sample': predefined samples, 'code_search_net': CodeSearchNet dataset, 'clustered': topic-clustered data)",
     )
     parser.add_argument(
         "--language",
         type=str,
         default="python",
+        choices=["python", "javascript", "go"],
         help="Programming language",
     )
     parser.add_argument(
@@ -463,9 +560,14 @@ def main():
         "--output_dir", type=str, default="output", help="Output directory for results"
     )
     parser.add_argument(
+        "--compare",
+        action="store_true",
+        help="Compare base CodeBERT with the fine-tuned model for the specified language",
+    )
+    parser.add_argument(
         "--codebert_only",
         action="store_true",
-        help="Run analysis only on the base CodeBERT model",
+        help="Run analysis only on the base CodeBERT model (overrides --compare)",
     )
 
     args = parser.parse_args()
@@ -488,7 +590,7 @@ def main():
                 )
             ]
         else:
-            models = load_finetuned_models()
+            models = load_models_for_language(args.language)
             if not models:
                 print("No models found. Using base CodeBERT model.")
                 models = [
@@ -500,17 +602,11 @@ def main():
                     )
                 ]
 
-        # Run cluster analysis with the selected models # Change this line, the file name will turn out to be wrong
-        cluster_analysis("topicwise_pairs.json", args.limit, models, args.output_dir)
+        # Run cluster analysis with the selected models
+        cluster_analysis(args.language, args.limit, models, args.output_dir)
         return  # Exit after clustered analysis
-    elif args.data == "synthetic":
-        # here also, Change this line, the file name will turn out to be wrong
-        data = load_synthetic_dataset("topicwise_pairs.json")
-        if not data:
-            print("[!] No synthetic data found or error loading data")
-            return
 
-    # Load models
+    # Load appropriate models based on arguments
     if args.codebert_only:
         print("[*] Using only the base CodeBERT model as requested")
         models = [
@@ -521,25 +617,32 @@ def main():
                 language="multilingual",
             )
         ]
+    elif args.compare:
+        print(f"[*] Comparing base CodeBERT with fine-tuned model for {args.language}")
+        models = load_models_for_language(args.language)
     else:
-        models = load_finetuned_models()
-        if not models:
-            print("No models found. Using base CodeBERT model.")
-            models = [
-                ModelConfig(
-                    name="microsoft/codebert-base",
-                    path="microsoft/codebert-base",
-                    is_finetuned=False,
-                    language="multilingual",
-                )
-            ]
+        # Default: use fine-tuned model if available, otherwise fall back to base model
+        models = load_models_for_language(args.language)
+        if len(models) == 1:  # Only base model available
+            print(
+                f"[!] Using base CodeBERT model (no fine-tuned model found for {args.language})"
+            )
+        else:
+            print(f"[*] Using fine-tuned model for {args.language}")
+            models = [models[1]]  # Use only the fine-tuned model
 
     print(f"[*] Found {len(models)} models for comparison")
     for i, model in enumerate(models, 1):
         print(f"  {i}. {model.name} ({model.language})")
 
     # Run comparison
-    compare_models(models, data[: args.limit], output_dir=args.output_dir)
+    compare_models(
+        models,
+        data[: args.limit],
+        output_dir=args.output_dir,
+        data_source=args.data,
+        language=args.language,
+    )
     print(f"\n[+] Analysis complete. Results saved to {args.output_dir}")
 
 
