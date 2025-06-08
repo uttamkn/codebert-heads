@@ -107,22 +107,79 @@ class AttentionAnalyzer:
             "query_to_code": attention_matrix[
                 query_start:query_end, code_start:code_end
             ]
-            .max()
+            .mean()
             .item(),
             "code_to_query": attention_matrix[
                 code_start:code_end, query_start:query_end
             ]
-            .max()
+            .mean()
             .item(),
             "code_to_code": attention_matrix[code_start:code_end, code_start:code_end]
-            .max()
+            .mean()
             .item(),
             "query_to_query": attention_matrix[
                 query_start:query_end, query_start:query_end
             ]
-            .max()
+            .mean()
             .item(),
+            "query_to_code_sparsity": self.get_sparsity(
+                attention_matrix[query_start:query_end, code_start:code_end]
+            ),
+            "query_to_code_std": self.get_std(
+                attention_matrix[query_start:query_end, code_start:code_end]
+            ),
+            "query_to_code_max": self.get_max(
+                attention_matrix[query_start:query_end, code_start:code_end]
+            ),
+            "query_to_code_entropy": self.get_entropy(
+                attention_matrix[query_start:query_end, code_start:code_end]
+            ),
         }
+
+    def get_cluster_inputs(self, encoded_inputs, sep_indices):
+        """
+        Args:
+            encoded_inputs (dict): A dictionary containing the encoded inputs.
+            sep_indices (list): A list of separator indices.
+
+        Returns:
+            dict: A dictionary containing flattened query-to-code attention metrics for every query-code pair.
+            cluster_input {
+                "query_to_code": (number of pairs, number of layers * number of heads)
+                "query_to_code_entropy": (number of pairs, number of layers * number of heads)
+            }
+        """
+        # Move input tensors to the same device as the model
+        encoded_inputs = {
+            k: v.to(self.device) if isinstance(v, torch.Tensor) else v
+            for k, v in encoded_inputs.items()
+        }
+
+        with torch.no_grad():
+            attention_data = self.model(**encoded_inputs).attentions
+
+        num_layers = len(attention_data)
+        num_heads = attention_data[0].shape[1]
+        batch_size = attention_data[0].shape[0]
+
+        cluster_input = {
+            "query_to_code": np.zeros((batch_size, num_layers * num_heads)),
+            "query_to_code_entropy": np.zeros((batch_size, num_layers * num_heads)),
+        }
+
+        for i in range(batch_size):
+            q2c = []
+            q2c_entropy = []
+            for j in range(num_layers):
+                for k in range(num_heads):
+                    matrix = attention_data[j][i][k]
+                    cross = self.cross_model_attn(matrix, sep_indices[j])
+                    q2c.append(cross["query_to_code"])
+                    q2c_entropy.append(cross["query_to_code_entropy"])
+            cluster_input["query_to_code"][i] = np.array(q2c)
+            cluster_input["query_to_code_entropy"][i] = np.array(q2c_entropy)
+
+        return cluster_input
 
     def analyze_attention(self, encoded_inputs, sep_indices):
         with torch.no_grad():
@@ -142,11 +199,28 @@ class AttentionAnalyzer:
             "code_to_query": np.zeros((num_layers, num_heads)),
             "code_to_code": np.zeros((num_layers, num_heads)),
             "query_to_query": np.zeros((num_layers, num_heads)),
+            "query_to_code_sparsity": np.zeros((num_layers, num_heads)),
+            "query_to_code_std": np.zeros((num_layers, num_heads)),
+            "query_to_code_max": np.zeros((num_layers, num_heads)),
+            "query_to_code_entropy": np.zeros((num_layers, num_heads)),
         }
 
         for i in range(num_layers):
             for k in range(num_heads):
-                ent, sp, std, max_, q2c, c2q, c2c, q2q = [], [], [], [], [], [], [], []
+                (
+                    ent,
+                    sp,
+                    std,
+                    max_,
+                    q2c,
+                    c2q,
+                    c2c,
+                    q2q,
+                    q2c_sp,
+                    q2c_std,
+                    q2c_max,
+                    q2c_ent,
+                ) = [], [], [], [], [], [], [], [], [], [], [], []
                 for j in range(batch_size):
                     matrix = attention_data[i][j][k]
                     ent.append(self.get_entropy(matrix))
@@ -158,6 +232,10 @@ class AttentionAnalyzer:
                     c2q.append(cross["code_to_query"])
                     c2c.append(cross["code_to_code"])
                     q2q.append(cross["query_to_query"])
+                    q2c_sp.append(cross["query_to_code_sparsity"])
+                    q2c_std.append(cross["query_to_code_std"])
+                    q2c_max.append(cross["query_to_code_max"])
+                    q2c_ent.append(cross["query_to_code_entropy"])
 
                 stats["entropy"][i, k] = np.mean(ent)
                 stats["sparsity"][i, k] = np.mean(sp)
@@ -167,6 +245,10 @@ class AttentionAnalyzer:
                 stats["code_to_query"][i, k] = np.mean(c2q)
                 stats["code_to_code"][i, k] = np.mean(c2c)
                 stats["query_to_query"][i, k] = np.mean(q2q)
+                stats["query_to_code_sparsity"][i, k] = np.mean(q2c_sp)
+                stats["query_to_code_std"][i, k] = np.mean(q2c_std)
+                stats["query_to_code_max"][i, k] = np.mean(q2c_max)
+                stats["query_to_code_entropy"][i, k] = np.mean(q2c_ent)
 
         return stats
 
