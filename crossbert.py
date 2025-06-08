@@ -173,7 +173,7 @@ class AttentionAnalyzer:
             for j in range(num_layers):
                 for k in range(num_heads):
                     matrix = attention_data[j][i][k]
-                    cross = self.cross_model_attn(matrix, sep_indices[j])
+                    cross = self.cross_model_attn(matrix, sep_indices[i])
                     q2c.append(cross["query_to_code"])
                     q2c_entropy.append(cross["query_to_code_entropy"])
             cluster_input["query_to_code"][i] = np.array(q2c)
