@@ -1,13 +1,24 @@
-from crossbert import AttentionAnalyzer
-from crossbert import load_synthetic_dataset, load_code_search_net_sample
-from crossbert import ModelConfig
+import umap
+import os
+import numpy as np
+import argparse
+import pickle
+from pathlib import Path
+from typing import Any
+from google import genai
+from crossbert import (
+    AttentionAnalyzer,
+    load_synthetic_dataset,
+    load_code_search_net_sample,
+    ModelConfig,
+)
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 import matplotlib.colors as mcolors
 from tqdm import tqdm
-import umap
-import os
-import numpy as np
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def get_code_pairs(language="python"):
@@ -132,16 +143,163 @@ def get_corresponding_pairs(labels, n_clusters, language="python"):
     return cluster_to_pairs
 
 
+def ask_gemini_to_infer_cluster_description(cluster_pairs, n_clusters):
+    system_prompt = """
+    You are a senior software engineer with 15 years of experience in software development. 
+    You are given a set of unlabelled clusters of natural language queries and their corresponding code snippets.
+    Your task is to infer the cluster description for each cluster.
+    """
+
+    user_prompt = "Here are the clustered code pairs:\n\n"
+
+    LIMIT = 25
+    for i in range(n_clusters):
+        user_prompt += f"cluster_{i + 1}:\n\n"
+        user_prompt += "\n\n".join(
+            [f"Query: {c[0]}\nCode: {c[1]}" for c in cluster_pairs[i][:LIMIT]]
+        )
+        user_prompt += "\n\n"
+
+    client = genai.Client(api_key=os.getenv("GEMINI_KEY"))
+    model = "gemini-2.0-flash-exp"
+    try:
+        response = client.models.generate_content(
+            model=model,
+            contents=[user_prompt],
+            config=genai.types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.7,
+            ),
+        )
+        if not response.text:
+            raise ValueError("Gemini LLM response text is empty")
+
+        print(response.text)
+        return response.text
+    except Exception as e:
+        print(e)
+        return None
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description="Cluster attention heads based on Q2C attention patterns"
+    )
+
+    # Main arguments
+    parser.add_argument(
+        "--generate-data", action="store_true", help="Generate attention scores data"
+    )
+    parser.add_argument(
+        "--load-data",
+        type=str,
+        default=None,
+        help="Load attention scores from pickle file",
+    )
+    parser.add_argument(
+        "--elbow-plot",
+        action="store_true",
+        help="Generate elbow plot for determining optimal clusters",
+    )
+    parser.add_argument(
+        "--cluster", action="store_true", help="Run clustering and visualization"
+    )
+    parser.add_argument(
+        "--ask-gemini",
+        action="store_true",
+        help="Ask Gemini to infer cluster description",
+    )
+
+    # Optional parameters
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="cluster_heads",
+        help="Output directory for saving results",
+    )
+    parser.add_argument(
+        "--num-examples", type=int, default=5000, help="Number of examples to process"
+    )
+    parser.add_argument(
+        "--language",
+        type=str,
+        default="python",
+        help="Programming language for code pairs",
+    )
+    parser.add_argument(
+        "--n-clusters", type=int, default=3, help="Number of clusters for K-means"
+    )
+    parser.add_argument(
+        "--dim-size", type=int, default=144, help="Dimensionality for UMAP reduction"
+    )
+    parser.add_argument(
+        "--max-clusters",
+        type=int,
+        default=15,
+        help="Maximum number of clusters for elbow plot",
+    )
+
+    return parser.parse_args()
+
+
+def ensure_output_dir(output_dir: str) -> None:
+    """Ensure the output directory exists."""
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+
+def save_data(data: Any, filepath: str) -> None:
+    """Save data to a pickle file."""
+    with open(filepath, "wb") as f:
+        pickle.dump(data, f)
+
+
+def load_data(filepath: str) -> Any:
+    """Load data from a pickle file."""
+    with open(filepath, "rb") as f:
+        return pickle.load(f)
+
+
+def main():
+    args = parse_arguments()
+
+    # Ensure output directory exists
+    ensure_output_dir(args.output_dir)
+
+    if args.generate_data:
+        print(f"Generating attention scores for {args.num_examples} examples...")
+        data = get_q2c_attn_score_for_all_pairs(
+            args.language, num_examples=args.num_examples
+        )
+        output_file = os.path.join(args.output_dir, "attention_scores.pkl")
+        save_data(data, output_file)
+        print(f"Data saved to {output_file}")
+    elif args.load_data:
+        print(f"Loading data from {args.load_data}")
+        data = load_data(args.load_data)
+    else:
+        print("Please specify either --generate-data or --load-data")
+        return
+
+    if args.elbow_plot:
+        print("Generating elbow plot...")
+        elbow_plot(data, max_clusters=args.max_clusters, new_dim=min(50, data.shape[1]))
+        print(f"Elbow plot saved to {os.path.join(args.output_dir, 'elbow.png')}")
+
+    if args.cluster:
+        print(f"Running K-means clustering with {args.n_clusters} clusters...")
+        labels = cluster_heads_kmeans(data, args.n_clusters, new_dim_size=args.dim_size)
+        visualize_clusters(data, labels, args.n_clusters)
+        print(
+            f"Clustering visualization saved to {os.path.join(args.output_dir, 'kmeans.png')}"
+        )
+
+        if args.ask_gemini:
+            print("Asking Gemini to infer cluster description...")
+            ask_gemini_to_infer_cluster_description(
+                get_corresponding_pairs(labels, args.n_clusters, args.language),
+                args.n_clusters,
+            )
+
+
 if __name__ == "__main__":
-    import pickle as bigle
-
-    # data = get_q2c_attn_score_for_all_pairs("python", num_examples=5000)
-    # with open("something.pkl", "wb") as f:
-    #     bigle.dump(data, f)
-
-    data = bigle.load(open("something.pkl", "rb"))
-    elbow_plot(data, new_dim=7)
-
-    n_clusters = 3
-    labels = cluster_heads_kmeans(data, n_clusters, new_dim_size=144)
-    visualize_clusters(data, labels, n_clusters)
+    main()
