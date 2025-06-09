@@ -510,7 +510,7 @@ def compare_models(
 
 
 def plot_comparison(all_stats, output_dir):
-    """Generate comparison plots across models."""
+    """Generate comparison plots and JSON metrics across models."""
     metrics = [
         "entropy",
         "sparsity",
@@ -520,6 +520,10 @@ def plot_comparison(all_stats, output_dir):
         "code_to_query",
         "code_to_code",
         "query_to_query",
+        "query_to_code_sparsity",
+        "query_to_code_std",
+        "query_to_code_max",
+        "query_to_code_entropy",
     ]
 
     for metric in metrics:
@@ -555,6 +559,38 @@ def plot_comparison(all_stats, output_dir):
         plot_path = os.path.join(output_dir, f"comparison_{metric}.png")
         plt.savefig(plot_path, bbox_inches="tight")
         plt.close()
+
+    # Create a dictionary to store all metrics for JSON output
+    comparison_data = {}
+
+    # Calculate mean values for each metric across all models
+    for model_name, data in all_stats.items():
+        stats = data["stats"]
+        comparison_data[model_name] = {}
+
+        for metric in metrics:
+            if metric in stats and stats[metric].size > 0:
+                try:
+                    # Calculate mean across heads and layers
+                    mean_values = np.mean(
+                        stats[metric], axis=1
+                    )  # Mean across heads per layer
+                    overall_mean = float(
+                        np.mean(mean_values)
+                    )  # Overall mean across all layers
+                    comparison_data[model_name][metric] = {
+                        "overall": overall_mean,
+                        "per_layer": mean_values.tolist(),
+                    }
+                except Exception as e:
+                    print(f"Error processing {metric} for {model_name}: {e}")
+
+    # Write the comparison data to a JSON file
+    json_path = os.path.join(output_dir, "metrics_comparison.json")
+    with open(json_path, "w") as f:
+        json.dump(comparison_data, f, indent=2)
+
+    print(f"\nMetrics comparison saved to: {json_path}")
 
 
 def load_models_for_language(language, base_dir="model"):
