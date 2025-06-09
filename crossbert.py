@@ -146,7 +146,6 @@ class AttentionAnalyzer:
             dict: A dictionary containing flattened query-to-code attention metrics for every query-code pair.
             cluster_input {
                 "query_to_code": (number of pairs, number of layers * number of heads)
-                "query_to_code_entropy": (number of pairs, number of layers * number of heads)
             }
         """
         # Move input tensors to the same device as the model
@@ -164,20 +163,16 @@ class AttentionAnalyzer:
 
         cluster_input = {
             "query_to_code": np.zeros((batch_size, num_layers * num_heads)),
-            "query_to_code_entropy": np.zeros((batch_size, num_layers * num_heads)),
         }
 
         for i in range(batch_size):
             q2c = []
-            q2c_entropy = []
             for j in range(num_layers):
                 for k in range(num_heads):
                     matrix = attention_data[j][i][k]
                     cross = self.cross_model_attn(matrix, sep_indices[i])
                     q2c.append(cross["query_to_code"])
-                    q2c_entropy.append(cross["query_to_code_entropy"])
             cluster_input["query_to_code"][i] = np.array(q2c)
-            cluster_input["query_to_code_entropy"][i] = np.array(q2c_entropy)
 
         return cluster_input
 
