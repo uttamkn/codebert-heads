@@ -136,18 +136,7 @@ class AttentionAnalyzer:
             ),
         }
 
-    def get_cluster_inputs(self, encoded_inputs, sep_indices):
-        """
-        Args:
-            encoded_inputs (dict): A dictionary containing the encoded inputs.
-            sep_indices (list): A list of separator indices.
-
-        Returns:
-            dict: A dictionary containing flattened query-to-code attention metrics for every query-code pair.
-            cluster_input {
-                "query_to_code": (number of pairs, number of layers * number of heads)
-            }
-        """
+    def get_q2c_attn_scores(self, encoded_inputs, sep_indices):
         # Move input tensors to the same device as the model
         encoded_inputs = {
             k: v.to(self.device) if isinstance(v, torch.Tensor) else v
@@ -161,20 +150,18 @@ class AttentionAnalyzer:
         num_heads = attention_data[0].shape[1]
         batch_size = attention_data[0].shape[0]
 
-        cluster_input = {
-            "query_to_code": np.zeros((batch_size, num_layers * num_heads)),
-        }
+        q2c_means = np.zeros((batch_size, num_layers * num_heads))
 
         for i in range(batch_size):
-            q2c = []
+            q2c_curr_mean = []
             for j in range(num_layers):
                 for k in range(num_heads):
                     matrix = attention_data[j][i][k]
                     cross = self.cross_model_attn(matrix, sep_indices[i])
-                    q2c.append(cross["query_to_code"])
-            cluster_input["query_to_code"][i] = np.array(q2c)
+                    q2c_curr_mean.append(cross["query_to_code"])
+            q2c_means[i] = np.array(q2c_curr_mean)
 
-        return cluster_input
+        return q2c_means
 
     def analyze_attention(self, encoded_inputs, sep_indices):
         with torch.no_grad():

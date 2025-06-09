@@ -1,37 +1,51 @@
 from crossbert import AttentionAnalyzer
-from crossbert import load_code_search_net_sample
+from crossbert import load_synthetic_dataset, load_code_search_net_sample
 from crossbert import ModelConfig
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
 import matplotlib.colors as mcolors
 from tqdm import tqdm
 import umap
+import os
 import numpy as np
 
 
-def get_inputs(language="python", num_examples=100):
-    data = load_code_search_net_sample(language)
+def get_code_pairs(language="python"):
+    domains = load_synthetic_dataset(language)
+    csn_data = load_code_search_net_sample(language)
+    data = []
+    for _, v in domains.items():
+        data.extend(v)
+
+    # add csn data to synthetic
+    data.extend(csn_data)
+    return data
+
+
+def get_q2c_attn_score_for_all_pairs(language="python", num_examples=100):
+    data = get_code_pairs(language)
     analyzer = AttentionAnalyzer(
         ModelConfig(
             name="microsoft/codebert-base",
-            path="microsoft/codebert-base",
-            is_finetuned=False,
-            language="multilingual",
+            path="model/python",
+            is_finetuned=True,
+            language="python",
         )
     )
 
+    # Create tokens and extract sep indices
     encoded_inputs_list, sep_indices_list = analyzer.preprocess(data)
 
+    # Limit examples
     encoded_inputs_list["input_ids"] = encoded_inputs_list["input_ids"][:num_examples]
     encoded_inputs_list["attention_mask"] = encoded_inputs_list["attention_mask"][
         :num_examples
     ]
     sep_indices_list = sep_indices_list[:num_examples]
 
+    # Get attention scores batch-wise
     batch_size = 128
-    qc = []
+    qc = []  # this will have q2c attn scores for all attn heads (flattened to a vector of size 144 (12x12))
     for i in tqdm(
         range(0, len(sep_indices_list), batch_size),
         total=(len(sep_indices_list) // batch_size),
@@ -40,46 +54,17 @@ def get_inputs(language="python", num_examples=100):
         att_masks = encoded_inputs_list["attention_mask"][i : i + batch_size]
         sep_list = sep_indices_list[i : i + batch_size]
 
-        batch_cluster_input = analyzer.get_cluster_inputs(
+        batch_cluster_input = analyzer.get_q2c_attn_scores(
             {"input_ids": inp_ids, "attention_mask": att_masks}, sep_list
         )
 
-        qc.extend(batch_cluster_input["query_to_code"])
-
-    qc = np.array(qc)
-
-    return {"query_to_code": qc}
+        qc.extend(batch_cluster_input)
+    return np.array(qc)
 
 
-def visualize_clusters(labels, n_clusters, metric, values):
-    pca = PCA(n_components=2)
-    X_2d = pca.fit_transform(values)
-
-    norm = mcolors.Normalize(vmin=0, vmax=n_clusters - 1)
-    cmap = plt.colormaps.get_cmap("tab10").resampled(n_clusters)
-
-    fig, ax = plt.subplots(figsize=(6, 5))
-    ax.scatter(X_2d[:, 0], X_2d[:, 1], c=labels, cmap=cmap, norm=norm, s=10)
-    ax.set_title(f"PCA of Attention Head Activations for {metric}")
-    ax.set_xlabel("PC1")
-    ax.set_ylabel("PC2")
-
-    # Add colorbar with axis explicitly provided
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-    sm.set_array([])
-    fig.colorbar(sm, ax=ax, label="Cluster ID")
-
-    # Save and close
-    file_path = f"cluster_heads_{metric}.png"
-    plt.savefig(file_path)
-    plt.close(fig)
-
-
-def elbow_plot(values, max_clusters=15):
-    pca_reduced = PCA(n_components=50).fit_transform(values)
-
-    reducer = umap.UMAP(n_neighbors=45, min_dist=0.1, n_components=20)
-    umap_embedding = reducer.fit_transform(pca_reduced)
+def elbow_plot(values, max_clusters=15, new_dim=20):
+    reducer = umap.UMAP(n_neighbors=45, min_dist=0.1, n_components=new_dim)
+    umap_embedding = reducer.fit_transform(values)
 
     wcss = []
     for k in range(1, max_clusters + 1):
@@ -96,62 +81,67 @@ def elbow_plot(values, max_clusters=15):
     plt.title("Elbow Method for Optimal Number of Clusters")
     plt.grid(True)
 
-    plt.savefig("elbow.png")
+    os.makedirs("cluster_heads", exist_ok=True)
+    plt.savefig("cluster_heads/elbow.png")
     plt.close()
 
 
-def cluster_heads_hdbscan(attention_metrics):
-    import hdbscan
+def cluster_heads_kmeans(values, n_clusters, new_dim_size):
+    # reduce dimensions
+    reducer = umap.UMAP(n_neighbors=45, min_dist=0.1, n_components=new_dim_size)
+    umap_embedding = reducer.fit_transform(values)
 
-    res = []
-    for k, v in attention_metrics.items():
-        print(f"Clustering {k} with HDBSCAN")
+    # apply kmeans
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+    kmeans.fit(umap_embedding)
 
-        pca = PCA(n_components=20)
-        v = pca.fit_transform(v)
-
-        # scaler = StandardScaler()
-        # v = scaler.fit_transform(v)
-
-        hdb = hdbscan.HDBSCAN()
-        hdb.fit(v)
-        labels = hdb.labels_
-        res.append({"metric": k, "labels": labels})
-
-    return res
+    return kmeans.labels_
 
 
-def cluster_heads_kmeans(attention_metrics, n_clusters=12):
-    res = []
-    for k, v in attention_metrics.items():
-        print(f"Clustering {k} with KMeans")
+def visualize_clusters(values, labels, n_clusters):
+    reducer = umap.UMAP(n_neighbors=45, min_dist=0.1, n_components=2)
+    X_2d = reducer.fit_transform(values)
 
-        pca_reduced = PCA(n_components=50).fit_transform(v)
+    norm = mcolors.Normalize(vmin=0, vmax=n_clusters - 1)
+    cmap = plt.colormaps.get_cmap("tab10").resampled(n_clusters)
 
-        reducer = umap.UMAP(n_neighbors=45, min_dist=0.1, n_components=20)
-        umap_embedding = reducer.fit_transform(pca_reduced)
+    fig, ax = plt.subplots(figsize=(6, 5))
+    ax.scatter(X_2d[:, 0], X_2d[:, 1], c=labels, cmap=cmap, norm=norm, s=10)
+    ax.set_title("UMAP of Attention Head Activations")
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
 
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-        kmeans.fit(umap_embedding)
-        labels = kmeans.labels_
-        res.append(
-            {"metric": k, "labels": labels, "centroids": kmeans.cluster_centers_}
-        )
+    # Add colorbar with axis explicitly provided
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    fig.colorbar(sm, ax=ax, label="Cluster ID")
 
-    return res
+    # Save and close
+    os.makedirs("cluster_heads", exist_ok=True)
+    file_path = "cluster_heads/kmeans.png"
+    plt.savefig(file_path)
+    plt.close(fig)
+
+
+def get_corresponding_pairs(labels, n_clusters, language="python"):
+    cluster_to_pairs = [[] for _ in range(n_clusters)]
+    pairs = get_code_pairs(language)
+    for i, label in enumerate(labels):
+        cluster_to_pairs[label].append(pairs[i])
+
+    return cluster_to_pairs
 
 
 if __name__ == "__main__":
     import pickle as bigle
 
-    # data = get_inputs("python", num_examples=5000)
+    # data = get_q2c_attn_score_for_all_pairs("python", num_examples=5000)
     # with open("something.pkl", "wb") as f:
-    #     pickle.dump(data, f)
+    #     bigle.dump(data, f)
 
     data = bigle.load(open("something.pkl", "rb"))
-    elbow_plot(data["query_to_code"])
+    elbow_plot(data, new_dim=7)
 
-    # n_clusters = 3
-    # res = cluster_heads_kmeans(data, n_clusters)
-    # for r in res:
-    #     visualize_clusters(r["labels"], n_clusters, r["metric"], data[r["metric"]])
+    n_clusters = 3
+    labels = cluster_heads_kmeans(data, n_clusters, new_dim_size=144)
+    visualize_clusters(data, labels, n_clusters)
