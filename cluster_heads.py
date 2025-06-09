@@ -253,6 +253,12 @@ def save_data(data: Any, filepath: str) -> None:
         pickle.dump(data, f)
 
 
+def save_text_data(data: str, filepath: str) -> None:
+    """Save text data to a file."""
+    with open(filepath, "w") as f:
+        f.write(data)
+
+
 def load_data(filepath: str) -> Any:
     """Load data from a pickle file."""
     with open(filepath, "rb") as f:
@@ -295,9 +301,16 @@ def main():
 
         if args.ask_gemini:
             print("Asking Gemini to infer cluster description...")
-            ask_gemini_to_infer_cluster_description(
+            conclusion = ask_gemini_to_infer_cluster_description(
                 get_corresponding_pairs(labels, args.n_clusters, args.language),
                 args.n_clusters,
+            )
+            save_text_data(
+                conclusion or "Gemini did not return a valid response.",
+                os.path.join(args.output_dir, "gemini_cluster_descriptions.txt"),
+            )
+            print(
+                f"Cluster descriptions saved to {os.path.join(args.output_dir, 'gemini_cluster_descriptions.txt')}"
             )
 
 
