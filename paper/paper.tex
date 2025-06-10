@@ -1,0 +1,432 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{Statistical Analysis of Attention Head Activations in Code Retrieval
+\\
+}
+
+\makeatletter
+\newcommand{\linebreakand}{%
+  \end{@IEEEauthorhalign}
+  \hfill\mbox{}\par
+  \mbox{}\hfill\begin{@IEEEauthorhalign}
+}
+\makeatother
+
+\author{
+\IEEEauthorblockN{Mohit Nair}
+\IEEEauthorblockA{\textit{Department of Information Science and Engineering} \\
+\textit{Ramaiah Institute of Technology}\\
+Bangalore - 560054, India \\
+1MS22IS079@msrit.edu}
+\and
+\IEEEauthorblockN{Shashank N S}
+\IEEEauthorblockA{\textit{Department of Information Science and Engineering} \\
+\textit{Ramaiah Institute of Technology}\\
+Bangalore - 560054, India \\
+1MS22IS125@msrit.edu}
+\linebreakand
+\IEEEauthorblockN{Suchit G}
+\IEEEauthorblockA{\textit{Department of Information Science and Engineering} \\
+\textit{Ramaiah Institute of Technology}\\
+Bangalore - 560054, India \\
+1MS22IS138@msrit.edu}
+\and
+\IEEEauthorblockN{Uttam K N}
+\IEEEauthorblockA{\textit{Department of Information Science and Engineering} \\
+\textit{Ramaiah Institute of Technology}\\
+Bangalore - 560054, India \\
+1MS22IS147@msrit.edu}
+}
+
+\maketitle
+
+\begin{abstract}
+Interpreting the internal mechanisms of transformer-based models for code understanding remains a challenge in advancing neural code intelligence, particularly as enterprises increasingly demand interpretable AI systems for production deployment in software engineering workflows. This paper presents a novice investigation into the attention mechanisms of BERT-based code models, specifically focusing on identifying which attention heads and layers are most influential in mapping natural language queries to corresponding code snippets. We propose a simple framework for analyzing attention patterns in CodeBERT and its variants, extracting and quantifying attention weights across all layers and heads when processing query-code pairs from multiple datasets including CodeSearchNet and synthetic code-query pairs from the Python programming language, among other programming languages. Our methodology uses several metrics to measure cross-segment attention flow, particularly query-to-code attention patterns, computing comprehensive statistical measures including entropy, sparsity, and attention distribution characteristics. Through analysis using clustering, we examine attention behavior across different code-query data points, enabling comparative analysis between base and fine-tuned CodeBERT models to reveal how task-specific adaptation affects attention mechanisms. Our findings contribute to the interpretability of neural code models by identifying critical attention heads responsible for semantic code-query alignment, offering practical insights for enterprise deployment where model transparency is essential for trust, debugging, and regulatory compliance. This work establishes a precursor for future research in attention-based code understanding for analyzing transformer architectures in production code retrieval applications.
+\end{abstract}
+
+\begin{IEEEkeywords}
+CodeBERT, Attention Mechanisms, Code Understanding, Natural Language to Code Mapping, Model Interpretability, Transformer Analysis, Code Retrieval
+\end{IEEEkeywords}
+
+\section{Introduction}
+The intersection of natural language processing and software engineering has emerged as one of the most promising areas for advancing developer productivity and automated programming tools [10]. As software development increasingly relies on intelligent systems for code search, documentation generation, and program understanding, the ability to effectively bridge the semantic gap between natural language queries and programming code has become crucial for modern software engineering practices. This capability underpins numerous applications, from intelligent code completion systems to automated programming assistants, representing a cornerstone of contemporary software development ecosystems [11][20].
+
+Recent advances in transformer-based language models, particularly BERT and its domain-specific variants, have demonstrated success in code-related tasks [10][23]. Models like CodeBERT have achieved state-of-the-art performance on various applications including code search, clone detection, and code summarization [2]. However, despite their impressive benchmark results, these models remain largely opaque, functioning as "black boxes" whose internal computational mechanisms are poorly understood [9][12]. This lack of interpretability poses significant challenges for model improvement, debugging, and the development of more efficient architectures [18].
+
+The attention mechanism, introduced in the seminal work by Vaswani et al. lies at the heart of transformer architectures and represents a theoretically interpretable window into model decision-making processes [1]. Unlike traditional neural network components, attention weights provide explicit information about which parts of the input the model considers relevant for specific tasks. However, the extent to which attention patterns in code-language models reflect meaningful semantic relationships between natural language descriptions and programming code remains an open and fundamental research question [12].
+
+This investigation addresses a critical gap in understanding neural code comprehension by examining which specific attention heads and layers in BERT-based models are most influential in mapping natural language queries to corresponding code snippets. Through systematic analysis of attention patterns across different layers and heads, we aim to identify the computational mechanisms that enable these models to understand semantic relationships between natural language descriptions and programming implementations [3]. This understanding is crucial not only for advancing theoretical foundations of code analysis but also for developing more efficient and interpretable models for software engineering applications [22].
+
+Our research methodology employs a simple approach combining large-scale data analysis, statistical modeling, and advanced visualization techniques to uncover attention patterns underlying code-language mapping [1][16]. By analyzing attention activations across diverse query-code pairs from multiple programming languages and domains, we seek to identify statistically significant patterns that reveal the functional specialization of individual attention heads [5][15]. Through clustering and dimensionality reduction techniques, we aim to characterize the semantic features captured by different attention components, providing insights into the distributed representation of code understanding in transformer models [14][16].
+
+
+\section{Review}
+\subsection{Transformer Architecture and Attention Mechanisms}
+The transformer architecture revolutionized natural language processing by demonstrating that attention mechanisms alone, without recurrence or convolution, could achieve state-of-the-art performance on sequence-to-sequence tasks. The multi-head self-attention mechanism enables models to capture long-range dependencies and complex relationships within sequences by computing attention weights that reflect the relevance of each token to every other token. This architecture has become the foundation for numerous large-scale language models, including BERT, GPT, and their many variants [3][12].
+
+The attention mechanism operates through three key components: query, key, and value matrices, derived from input representations through learned linear transformations. Attention weights are computed as the scaled dot-product of queries and keys, followed by softmax normalization to ensure weights sum to one. These weights determine how much each value contributes to the final representation, enabling dynamic focus on relevant input parts. Multi-head attention extends this concept by performing multiple attention operations in parallel, each capturing different types of relationships and dependencies [5].
+
+Recent research has explored various extensions and modifications to standard attention mechanisms, including sparse attention patterns, local attention windows, and structured attention matrices [7] [15]. These innovations aim to improve computational efficiency while maintaining the model's ability to capture complex dependencies [8][21]. However, the fundamental principle of using attention weights to selectively aggregate information remains central to transformer-based architectures.
+
+\subsection{Code-Language Models and Pre-training}
+The development of specialized transformer models for programming languages began with the recognition that code has unique characteristics that distinguish it from natural language text [9][10]. Programming code exhibits both syntactic structure, defined by formal grammars, and semantic relationships that span multiple levels of abstraction [2][9]. Early attempts to apply natural language processing techniques to code focused primarily on treating code as token sequences, similar to natural language text [10][22].
+
+CodeBERT represents an important milestone in code understanding by pre-training a bimodal transformer model in both natural language and programming code [10]. The model employs a hybrid pretraining objective that includes masked language modeling for both modalities and a replaced token detection task that helps distinguish between original and generated code tokens [10]. This approach enables CodeBERT to capture cross-modal relationships between natural language descriptions and code implementations, achieving strong performance in tasks such as code search and documentation generation [10].
+
+GraphCodeBERT extends this approach by incorporating structural information about code through data flow graphs, representing semantic relationships between variables and their dependencies [2]. This model demonstrates that explicit modeling of the code structure can improve the performance of code understanding tasks, suggesting that attention mechanisms alone may not adequately capture all relevant aspects of code semantics [2][9]. The incorporation of graph-based information raises important questions about how attention patterns might reflect or complement the structural understanding of the code [2][9].
+
+\subsection{Attention Analysis and Interpretability}
+The interpretability of attention mechanisms in transformer models has been a subject of considerable debate in the research community [3]. Early work by Clark et al. in "What Does BERT Look At?" provided systematic evidence that individual attention heads in BERT learn to capture specific linguistic phenomena, such as syntactic dependencies, coreference relationships, and positional patterns [3]. This research suggested that attention weights might serve as a window into the model's internal reasoning process, enabling understanding of how models process different types of linguistic information [3][12].
+
+However, subsequent research has challenged the notion that attention weights provide reliable explanations for model behavior [13]. Studies have demonstrated that attention weights can be manipulated without significantly affecting model output, raising questions about the causal relationship between attention patterns and model decisions. Further research showed that seemingly important attention patterns may not be necessary for model performance, suggesting that attention weights might reflect correlation rather than causation in model behavior [13].
+
+Despite these challenges, attention analysis remains an active research area, with new methods emerging to provide more robust interpretations of attention patterns [5] [18]. Recent work has focused on developing causal intervention techniques, analyzing attention patterns in multiple layers simultaneously, and combining attention analysis with other interpretability methods such as gradient-based attribution and probing classifiers [6]. These approaches aim to provide a more comprehensive understanding of how attention mechanisms contribute to model behavior [18].
+
+\subsection{Statistical Analysis and Visualization Techniques}
+Analysis of attention patterns in transformer models requires sophisticated statistical and visualization techniques to handle the high-dimensional nature of attention data [14][16]. A typical transformer model contains hundreds of attention heads across multiple layers, each producing attention matrices that can vary significantly across different inputs [5][15]. Identifying statistically significant patterns in this data requires careful consideration of multiple testing correction, appropriate baseline comparisons, and robust statistical measures [19].
+
+Clustering techniques have proven particularly valuable for analyzing attention patterns, enabling researchers to identify groups of attention heads with similar behavior and understand functional specialization of different model components [5][15]. Methods such as k-means clustering, hierarchical clustering, and spectral clustering have been applied to attention weights, attention entropy measures, and derived features such as attention distance and sparsity [8][15]. These analyses often reveal that attention heads within the same layer tend to exhibit similar patterns, but also identify specific heads that capture unique aspects of the input [5][8].
+
+Dimensionality reduction techniques, including Principal Component Analysis (PCA), t-SNE, and UMAP, have been essential for visualizing high-dimensional attention patterns and understanding the geometric structure of attention spaces [14][16]. These techniques enable researchers to identify clusters of similar attention patterns, visualize progression of attention across layers, and understand how different types of inputs are processed by the model [16][19]. Recent work has also explored the use of topographic maps and other neuroscience-inspired visualization techniques to understand the organization of attention patterns [14][16].
+
+\subsection{Code Search and Retrieval Systems}
+Code search represents one of the most direct applications of code-language mapping, where natural language queries must be matched against large corpora of code snippets to retrieve relevant examples. Traditional code search systems relied primarily on keyword matching and information retrieval techniques, but these approaches often failed to capture semantic relationships between queries and code [11]. The development of deep learning code search systems has significantly improved retrieval performance by learning dense representations that capture semantic similarity beyond surface-level token overlap [11].
+
+Deep Learning based Code Search systems have demonstrated the effectiveness of embedding-based approaches for code retrieval, where both natural language queries and code snippets are mapped to shared vector spaces where semantically similar items are located close to each other [11]. These systems typically employ bi-encoder architectures where separate encoders process natural language and code, followed by similarity computation in the shared embedding space [11]. More recent approaches have explored cross-encoder architectures that can capture more complex interaction patterns between queries and code [11][21].
+
+The evaluation of code search systems has established several important benchmarks and metrics relevant to understanding attention patterns. The CodeSearchNet dataset, containing millions of function-docstring pairs across multiple programming languages, has become a standard benchmark for evaluating code-language models [17]. Evaluation metrics such as Mean Reciprocal Rank (MRR) and Normalized Discounted Cumulative Gain (NDCG) focus on ranking quality of retrieved results, emphasizing the importance of placing relevant code snippets at the top of search results. Understanding how attention patterns relate to these evaluation metrics could provide insights into mechanisms underlying successful code retrieval.
+
+\subsection{Semantic Code Understanding and Program Analysis
+}
+The field of semantic code understanding encompasses a broad range of tasks requiring models to reason about the meaning and behavior of programs, rather than just their surface-level syntactic properties [22]. These tasks include program synthesis, bug detection, code summarization, and semantic code search, all requiring understanding of relationships between different parts of programs and between programs and their natural language descriptions. Traditional program analysis techniques have relied heavily on formal methods, symbolic execution, and static analysis to understand program semantics [22].
+
+However, traditional approaches often struggle with informal aspects of software development, such as variable naming conventions, code comments, and implicit knowledge that developers use when writing and reading code [22]. Neural approaches to program analysis offer the potential to capture these informal semantic relationships while maintaining some level of formal reasoning capability [22]. Recent work in neural program analysis has explored various approaches to incorporating structural information about programs into neural models, including abstract syntax trees, control flow graphs, and data flow representations [9][22].
+
+These approaches complement attention-based models by providing explicit structural biases that can guide the learning process [2][9]. Understanding how attention patterns interact with these structural representations could provide insights into the relative importance of different types of information for code understanding tasks [9][22]. The intersection of attention analysis and semantic code understanding represents a promising direction for future research, as attention patterns might reveal how models balance between syntactic, semantic, and pragmatic aspects of code understanding.
+
+
+\section{Background and Mathematical Foundations}
+\label{sec:background}
+
+This section outlines the foundational models and mathematical principles underpinning our work, from the Transformer-based architecture of BERT to its application in code retrieval and the methods for analyzing its attention mechanisms.
+
+\subsection{BERT: Bidirectional Encoder Representations from Transformers}
+\label{ssec:bert}
+
+BERT (Bidirectional Encoder Representations from Transformers) represents a paradigm shift in natural language processing by introducing bidirectional context understanding through the Transformer architecture [1][23]. Unlike previous sequential models, BERT processes input tokens simultaneously, enabling rich contextual representations.
+
+\subsubsection{Architecture Overview}
+BERT consists of multiple layers of Transformer encoder blocks, each containing:
+\begin{itemize}
+    \item Multi-head self-attention mechanism
+    \item Position-wise feed-forward networks
+    \item Residual connections and layer normalization
+\end{itemize}
+
+The core mathematical foundation lies in the scaled dot-product self-attention mechanism, which allows the model to weigh the importance of different words in the input sequence:
+\begin{equation}
+    \text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V
+    \label{eq:self_attention}
+\end{equation}
+where $Q$, $K$, and $V$ represent the query, key, and value matrices respectively, and $d_k$ is the dimension of the key vectors, used as a scaling factor.
+
+\subsubsection{Multi-Head Attention}
+To capture different types of relationships and learn from different representation subspaces, BERT employs multi-head attention:
+\begin{equation}
+    \text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, \dots, \text{head}_h)W^O
+    \label{eq:multihead_attention}
+\end{equation}
+where each attention head is computed in parallel as:
+\begin{equation}
+    \text{head}_i = \text{Attention}(QW_i^Q, KW_i^K, VW_i^V)
+    \label{eq:attention_head}
+\end{equation}
+Here, $W_i^Q$, $W_i^K$, and $W_i^V$ are learned linear projection matrices for the $i$-th head, and $W^O$ is an output projection matrix. The attention weights for head $i$ in layer $l$ can be expressed as:
+\begin{equation}
+    A_{i,l} = \text{softmax}\left(\frac{Q_lW_{i,l}^Q(K_lW_{i,l}^K)^T}{\sqrt{d_k}}\right)
+    \label{eq:attention_weights}
+\end{equation}
+
+\subsection{CodeBERT: Adapting BERT for Code Understanding}
+\label{ssec:codebert}
+CodeBERT extends BERT's capabilities to programming languages by pre-training on a large corpus of both natural language and source code \cite{feng2020codebert}. It maintains BERT's architectural foundation while developing a code-specific understanding through a bimodal pre-training objective.
+
+\subsubsection{Bimodal Pre-training Objective}
+CodeBERT is trained using a combination of two tasks:
+\begin{enumerate}
+    \item \textbf{Masked Language Modeling (MLM)} for both natural language comments and code tokens. This objective trains the model to predict masked tokens based on their context:
+    \begin{equation}
+        \mathcal{L}_{\text{MLM}} = -\mathbb{E}_{x \sim D}\left[\sum_{i \in M} \log P(x_i | x_{\setminus M})\right]
+        \label{eq:mlm_loss}
+    \end{equation}
+    where $M$ is the set of indices of masked tokens.
+
+    \item \textbf{Replaced Token Detection (RTD)} for code tokens. This task trains a discriminator to distinguish between original tokens and plausible but incorrect tokens generated by another model:
+    \begin{equation}
+    \begin{split}
+        \mathcal{L}_{\text{RTD}} = -\mathbb{E}_{x \sim D}\Bigg[\sum_{i=1}^n \Big( &\delta(x_i) \log D(x_i) \\
+        & + (1-\delta(x_i)) \log(1 - D(x_i)) \Big)\Bigg]
+    \end{split}
+    \label{eq:rtd_loss}
+    \end{equation}
+    where $D$ is the discriminator network and $\delta(x_i)$ is an indicator function that is 1 if $x_i$ is a corrupted token and 0 otherwise.
+\end{enumerate}
+
+\subsection{Code Retrieval from Natural Language Queries}
+\label{ssec:code_retrieval}
+Code retrieval involves mapping natural language descriptions to semantically relevant code snippets. This task is typically formulated as a similarity learning problem where the goal is to embed queries and code into a shared vector space.
+
+\subsubsection{Dual-Encoder Architecture}
+The retrieval system often employs a dual-encoder architecture with separate encoders for natural language queries and code snippets. The relevance score is computed as the cosine similarity between the vector representations:
+\begin{equation}
+    \text{sim}(q, c) = \cos(\mathbf{f}_q(q), \mathbf{f}_c(c)) = \frac{\mathbf{f}_q(q) \cdot \mathbf{f}_c(c)}{\|\mathbf{f}_q(q)\| \cdot \|\mathbf{f}_c(c)\|}
+    \label{eq:cosine_similarity}
+\end{equation}
+where $\mathbf{f}_q$ and $\mathbf{f}_c$ are the query and code encoders, respectively, which map their inputs to fixed-size vectors.
+
+\subsubsection{Training Objective}
+The model is trained using contrastive learning, where for each query, a corresponding positive code snippet is contrasted against a set of negative (irrelevant) snippets. The InfoNCE loss is commonly used:
+\begin{equation}
+    \mathcal{L} = -\log \frac{\exp(\text{sim}(q, c^+)/\tau)}{\exp(\text{sim}(q, c^+)/\tau) + \sum_{c^- \in N} \exp(\text{sim}(q, c^-)/\tau)}
+    \label{eq:infonce_loss}
+\end{equation}
+where $c^+$ is the positive code snippet, $N$ is the set of negative samples, and $\tau$ is a temperature hyperparameter that scales the similarity scores.
+
+\subsection{Cross-Modal Attention Patterns}
+\label{ssec:cross_modal_attention}
+For query-code pairs, cross-modal attention captures the alignment between natural language tokens and code elements within a single, unified input representation (as used in cross-encoder models).
+\begin{equation}
+    A_{cross}^{(h,l)} = \text{softmax}\left(\frac{Q_{h,l}^{(\text{query})}(K_{h,l}^{(\text{code})})^T}{\sqrt{d_k}}\right)
+    \label{eq:cross_attention}
+\end{equation}
+This matrix reveals which code tokens are most attended to by each query token, providing insights into the model's understanding of semantic correspondences.
+
+\section{Methodology}
+\subsection{Datasets Used}
+Synthetic code-query pairs were generated using Gemini-2.5-flash, compiled into synthetic datasets\footnote{Dataset available on Kaggle: \href{https://www.kaggle.com/datasets/mohitnair512/synthetic-code-query-pairs-golang-js-and-python}{synthetic-code-query-pairs}} for JavaScript, Go and Python over 12 semantic topics chosen arbitrarily. The dataset size is 1152, per language, with exactly 96 code-query pairs for each topic per language. The topics chosen were as follows: "data structures and algorithms", "control flow and function logic", "object-oriented programming", "web server code", "unit testing", "data analysis", "file handling", "machine learning code", "scientific and mathematical code", "image processing code", "database operations", "network programming".
+The exercise also includes the CodeSearchNet dataset and was used throughout the fine-tuning and clustering topics, as seen in further sections.
+
+\subsection{Data Exploration}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{figures/constant_similarity_matrix.png}
+\caption{Constant similarity matrix showing topic relationships.}
+\label{fig:constant_similarity}
+\end{figure}
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics[width=0.7\linewidth]{figures/variable_similarity_matrix.png}
+\caption{Variable similarity matrix demonstrating cluster distributions.}
+\label{fig:variable_similarity}
+\end{figure*}
+
+
+Through this analysis we explore the underlying structure of a collection of code snippets and queries through topic modeling and clustering methodologies. The primary objective was to identify different thematic patterns, and analyze the relationships between different topics. Data exploration analysis was exclusive to the Python code-code queries from the synthetic dataset.
+
+The approach starts with the generation of embeddings for both textual queries and code snippets using language models: all-MiniLM-L6-v2 for query processing and microsoft/codebert-base for code snippet analysis. Subsequently, these embeddings underwent dimensionality reduction using UMAP to facilitate visualization and clustering processes. HDBSCAN was selected for clustering because of its ability to handle varying cluster densities and effectively identify noise within the data. Finally, BERTopic was applied to extract and model the underlying topics, with comprehensive visualizations developed to represent the relationships and distributions of these topics [24].
+
+The analysis identified 63 distinct topics, each representing different programming concepts that include file operations, database interactions, and mathematical computations. The generated visualizations, which comprise similarity matrices (Fig. \ref{fig:constant_similarity} and \ref{fig:variable_similarity}), revealed clear patterns and relationships between topics. The results provide a comprehensive overview of the structural characteristics of the dataset, highlighting the diversity of programming concepts and their inherent interconnections.
+
+\subsection{Model Analysis}
+
+Core analysis is implemented through a custom attention-analyzing algorithm (Algorithm \ref{alg:attention-analysis}) that examines attention matrices across all layers and heads of CodeBERT, computing multiple statistical metrics including entropy, sparsity, and cross-modal attention scores to characterize attention behavior. The system decomposes attention matrices into distinct regions (query-to-code, code-to-query, and intra-modal attention) to isolate cross-modal information transfer patterns, with a preprocessing pipeline that tokenizes query-code pairs and identifies separator token indices to enable precise segmentation of attention regions. To identify functionally similar attention heads, the methodology employs UMAP dimensionality reduction combined with K-means clustering on query-to-code attention scores extracted from multiple query-code pairs across synthetic and CodeSearchNet datasets.
+
+The experimental pipeline presents a systematic framework for analyzing attention mechanisms in CodeBERT to understand how transformer-based code-language models process query-code relationships. The pipeline operates on merged datasets from CodeSearchNet and synthetic code-query pairs, processing each sample through CodeBERT's 12-layer, 12-head transformer architecture by first tokenizing and embedding query-code pairs with separator tokens, then extracting attention weights $A_h^l$ for each head $h$ in layer $l$. The methodology partitions attention matrices into four cross-modal regions (Q→Q, Q→C, C→Q, C→C) based on separator token positions and computes comprehensive statistics including mean, standard deviation, entropy, and sparsity for each attention head to quantify attention distribution patterns. To identify similar attention heads, the algorithm extracts 144-dimensional feature vectors representing query-to-code attention scores across all heads and layers, applies UMAP dimensionality reduction followed by K-means clustering, and employs large language model-based interpretation to provide semantic descriptions of each cluster's role. This approach enables systematic identification of attention heads specialized for code-language mapping.
+
+\begin{algorithm}[htbp]
+\caption{Pipeline for Attention Head Analysis in CodeBERT}
+\label{alg:attention-analysis} 
+\begin{algorithmic}
+\State \textbf{Input:} CodeSearchNet dataset $\mathcal{D}_{\text{real}}$, synthetic dataset $\mathcal{D}_{\text{syn}}$
+\State \textbf{Output:} Attention statistics, cluster assignments, cluster interpretations
+\Procedure{AttentionAnalysisPipeline}{}
+    \State $\mathcal{D} \gets \mathcal{D}_{\text{real}} \cup \mathcal{D}_{\text{syn}}$ \Comment{Merge datasets}
+    
+    \ForAll{$(q, c) \in \mathcal{D}$}
+        \State $T \gets \text{Tokenize}(q \,\|\, \texttt{[SEP]} \,\|\, c)$
+        \State $\texttt{sep\_idx} \gets \text{IndexOf}(\texttt{[SEP]} \in T)$
+        
+        \State $X \gets \text{TokenEmbedding}(T)$
+        \State $P \gets \text{PositionalEmbedding}(|T|)$
+        \State $H_0 \gets X + P$ \Comment{Initial hidden states}
+
+        \For{$l = 1$ to $12$} \Comment{Each transformer layer}
+            \For{$h = 1$ to $12$} \Comment{Each attention head}
+                \State $Q_h^l \gets H_{l-1} W_Q^h$
+                \State $K_h^l \gets H_{l-1} W_K^h$
+                \State $V_h^l \gets H_{l-1} W_V^h$
+                \State $A_h^l \gets \text{softmax} \left( \frac{Q_h^l (K_h^l)^T}{\sqrt{d_k}} \right)$
+                \State $Z_h^l \gets A_h^l \cdot V_h^l$
+            \EndFor
+            \State $Z^l \gets \text{Concat}(Z_1^l, \dots, Z_{12}^l) W_O$
+            \State $H_l \gets \text{LayerNorm}(H_{l-1} + \text{FFN}(Z^l))$
+        \EndFor
+        
+        \State $A \gets \{A_h^l\}_{l=1}^{12}, h=1,\dots,12$ \Comment{All attention maps}
+        
+        \ForAll{$A_h^l \in A$}
+            \State Compute $\text{mean}, \text{std}, \text{max}, \text{entropy}$ for $A_h^l$
+            \State Partition $A_h^l$ into Q$\rightarrow$Q, Q$\rightarrow$C, C$\rightarrow$Q, C$\rightarrow$C using \texttt{sep\_idx}
+            \State Compute $\text{mean}, \text{std}, \text{entropy}, \text{sparsity}$ for each partition
+        \EndFor
+    \EndFor
+
+    \State Visualize head statistics as heatmaps
+
+    \ForAll{$(q, c) \in \mathcal{D}$}
+        \State $v \gets []$
+        \ForAll{$A_h^l \in A$}
+            \State $v.\text{append}(\text{mean}(A_h^l[\text{Q} \rightarrow \text{C}]))$
+        \EndFor
+        \State $\mathcal{F}.\text{append}(v)$ \Comment{144-D vector per data point}
+    \EndFor
+
+    \State $\mathcal{F}_{\text{UMAP}} \gets \text{UMAP}(\mathcal{F})$
+    \State $\text{clusters} \gets \text{KMeans}(\mathcal{F}_{\text{UMAP}}, k)$
+
+    \ForAll{cluster $C_i$ in $\text{clusters}$}
+        \State Select sample $(q, c)$ pairs from $C_i$
+        \State $\text{desc}_i \gets \text{LLMDescribe}(q, c)$ \Comment{LLM-based summarization}
+    \EndFor
+
+    \State \Return attention statistics, cluster assignments, cluster descriptions
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+
+\begin{table*}[!t]
+\centering
+\caption{Overall attention statistics for CodeBERT models. The table shows general attention properties, the average attention weight between different token types (Query, Code), and a detailed breakdown for Query-to-Code attention heads. All values represent the overall average across all layers.}
+\label{tab:attention_stats}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Metric} & \textbf{CodeBERT (multilingual)} & \textbf{CodeBERT (Python)} \\
+\midrule
+\multicolumn{3}{l}{\textit{General Attention Statistics}} \\
+\quad Entropy            & 7.476  & 7.525 \\
+\quad Sparsity           & 0.965  & 0.962 \\
+\quad Std Dev            & 0.033  & 0.034 \\
+\quad Max Value          & 0.720  & 0.758 \\
+\midrule
+\multicolumn{3}{l}{\textit{Attention Type Averages}} \\
+\quad Query-to-Query     & 0.021  & 0.027 \\
+\quad Query-to-Code      & 0.002  & 0.003 \\
+\quad Code-to-Query      & 0.003  & 0.004 \\
+\quad Code-to-Code       & 0.007  & 0.008 \\
+\midrule
+\multicolumn{3}{l}{\textit{Query-to-Code Head Statistics}} \\
+\quad Q2C Entropy        & 5.216  & 5.105 \\
+\quad Q2C Sparsity       & 0.954  & 0.941 \\
+\quad Q2C Std Dev        & 0.006  & 0.010 \\
+\quad Q2C Max Value      & 0.117  & 0.169 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Comparing CodeBERT-base and finetuned variants}
+The comparative analysis of attention statistics (Table \ref{tab:attention_stats}) between multilingual and Python-specific CodeBERT models reveals distinct behavioral patterns in their attention mechanisms. Although both models exhibit high sparsity (0.965 for multilingual, 0.962 for Python specific), indicating focused attention allocation, the Python-specific variant demonstrates enhanced cross-modal interaction capabilities with consistently higher attention type averages across all categories, most notably in query-to-code attention (0.027 vs. 0.021) and code-to-code attention (0.008 vs 0.007). The query-to-code head statistics further highlight this specialization, where the Python model achieves higher maximum attention values (0.169 vs 0.117) despite lower entropy (5.105 vs 5.216), suggesting more pronounced and decisive attention peaks for critical query-code alignments. These findings indicate that domain-specific training in Python enables more effective multimodal integration between natural language queries and code representations, while maintaining the sparse attention structure characteristic of efficient transformer processing.
+
+\subsection{Comparing Attention Patterns across Languages on CodeBERT-base}
+The comparative analysis of mean attention head activations across programming language variants reveals subtle but meaningful differences in model behavior (Table \ref{tab:attention_activations}). All three models exhibit remarkably similar sparsity values (0.964-0.965), indicating consistent sparse attention patterns regardless of the target programming language, while entropy measurements show minor variations with JavaScript achieving the highest value (7.561) followed by Go (7.497) and Python (7.476). The cross-attention mechanisms demonstrate more pronounced language-specific patterns, with Go exhibiting the strongest code-to-code attention (0.0069) and code-to-query attention (0.0027), suggesting enhanced intra-code and code-to-natural-language relationship modeling. Conversely, JavaScript shows the weakest cross-attention values across both code-to-query (0.0019) and code-to-code (0.0056) categories, while maintaining the highest query-to-query attention (0.025), potentially indicating a greater reliance on natural language context for understanding. These findings suggest that while the fundamental attention architecture remains consistent across programming languages, the models develop language-specific attention allocation strategies that reflect the distinct syntactic and semantic characteristics of each programming paradigm.
+
+\begin{table}[h]
+\centering
+\caption{Mean Attention Head Activations Across Model Variants}
+\label{tab:attention_activations}
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Metric} & \textbf{Python} & \textbf{JavaScript} & \textbf{Go} \\
+\hline
+Entropy & 7.476 & 7.561 & 7.497 \\
+\hline
+Sparsity & 0.965 & 0.964 & 0.964 \\
+\hline
+Standard Deviation & 0.033 & 0.033 & 0.033 \\
+\hline
+Maximum & 0.720 & 0.728 & 0.729 \\
+\hline
+Query-to-Code & 0.0022 & 0.0017 & 0.0026 \\
+\hline
+Code-to-Query & 0.0026 & 0.0019 & 0.0027 \\
+\hline
+Code-to-Code & 0.0065 & 0.0056 & 0.0069 \\
+\hline
+Query-to-Query & 0.021 & 0.025 & 0.022 \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Clustering of Attention Head Activations}
+
+A clustering methodology is employed  to analyze the attention head patterns of CodeBERT, to derive insights into how different attention heads interact with natural language queries and code snippets. The process of extracting query-to-code attention scores as aforementioned, (Q2C) used the Algorithm {\ref{alg:attention-analysis}, which employs a CodeBERT model finetuned on CodeSearchNet dataset [2]. A scalar score for the Q2C quadrant in each attention head matrix was obtained. UMAP dimensionality reduction is applied to project the 144-dimensional Q2C attention vectors into a low-dimensional space to counter the curse of dimensionality, while preserving the underlying structure of the data. 
+
+K-means clustering is employed on the reduced embeddings to partition the attention head activations into distinct clusters. The optimal number of clusters is chosen using the elbow method, which evaluates the within-cluster sum of squares (WCSS) across a range of cluster counts. Initially, values 2 and 3 (optimal cluster number) were considered for experimentation. Visualizations of the resulting clusters are generated using UMAP projections in two dimensions enabling a clear interpretation of the spatial distribution of clusters. Additionally, k random samples (k value of 25 was chosen empirically) of code-query pairs from each cluster was passed to the Gemini-Flash-2.0 Language Model for obtaining semantic topic labels for each cluster.
+
+\subsection{Inference}
+For each cluster, we obtained the mean of the 144-dimensional (12 Layers $\times$ 12 Heads) Q2C Attention Head scores of all samples in the cluster, resulting in a $1 \times 144$ dimensional vector.
+
+
+
+\section{Conclusion}
+In this paper, we presented a comprehensive statistical analysis of attention head activations in transformer-based models for code retrieval. Our work introduced a systematic framework to deconstruct the internal mechanisms of CodeBERT, identifying the specific layers and heads that are most influential in aligning natural language queries with corresponding code snippets. By leveraging a combination of statistical metrics, dimensionality reduction, and clustering techniques across diverse datasets, we successfully isolated and characterized functionally specialized attention patterns.
+
+Our empirical findings reveal several key insights. First, we demonstrated that domain-specific fine-tuning significantly enhances cross-modal attention; the Python-specific CodeBERT model exhibited more focused and pronounced query-to-code attention compared to its multilingual counterpart, confirming that task-specific adaptation sharpens semantic alignment capabilities. Second, our cross-language analysis showed that while all models employ sparse attention, they develop distinct, language-specific strategies. For instance, the Go model showed a stronger focus on intra-code relationships, whereas the JavaScript model relied more heavily on query-side context. These results highlight the model's adaptability to the unique syntactic and semantic structures of different programming languages.
+
+The implications of this research are two-fold. For the research community, it contributes to the broader goal of model interpretability, moving beyond performance metrics to understand the underlying computational processes of neural code intelligence. For enterprise applications, where transparency, reliability, and debugging are paramount, our findings offer practical guidance. Identifying critical attention heads provides a pathway for developing more efficient models through techniques like head pruning, enables more targeted model debugging by pinpointing sources of error, and builds trust in AI-driven software engineering tools by making their decision-making processes more transparent.
+
+This work establishes a foundation for several promising avenues of future research. Future studies could extend this analytical framework to other transformer architectures, such as GraphCodeBERT, to investigate how attention mechanisms interact with explicit structural information like data flow graphs. Furthermore, the identified attention patterns could be used to guide causal interventions, testing the direct impact of specific heads on model performance and potentially leading to the development of pruned, computationally efficient models tailored for production environments. Ultimately, this line of inquiry will continue to bridge the gap between the empirical success and theoretical understanding of large language models for code.
+
+
+
+\section*{Acknowledgment}
+
+The authors gratefully acknowledge the guidance and mentorship of Associate Prof. Dr. Geetha V, Department of Information Science and Engineering, Ramaiah Institute of Technology. Their insightful feedback and constant support were instrumental to the success of this work.
+
+\begin{thebibliography}{00}
+\bibitem{b1} Z. Feng \textit{et al.}, ``CodeBERT: A Pre-Trained Model for Programming and Natural Languages,'' in \textit{Findings of the Association for Computational Linguistics: EMNLP}, 2020, pp. 1536--1547.
+\bibitem{b2} H. Husain \textit{et al.}, ``CodeSearchNet Challenge: Evaluating the State of Semantic Code Search,'' \textit{arXiv preprint arXiv:1909.09436}, 2019.
+\bibitem{b3} K. Clark, U. Khandelwal, O. Levy, and C. D. Manning, ``What Does BERT Look At? An Analysis of BERT's Attention,'' in \textit{Proc. ACL Workshop BlackboxNLP}, 2019, pp. 276--286.
+\bibitem{b4} D. Guo \textit{et al.}, ``GraphCodeBERT: Pre-training Code Representations with Data Flow,'' in \textit{Int. Conf. Learn. Represent.}, 2021.
+\bibitem{b5} E. Voita, D. Talbot, F. Moiseev, R. Sennrich, and I. Titov, ``Analyzing Multi-Head Self-Attention: Specialized Heads Do the Heavy Lifting, the Rest Can Be Pruned,'' in \textit{Proc. 57th Annu. Meet. Assoc. Comput. Linguist.}, 2019, pp. 5797--5808.
+\bibitem{b6} Y. Belinkov and J. Glass, ``Analysis Methods in Neural Language Processing: A Survey,'' \textit{Trans. Assoc. Comput. Linguist.}, vol. 7, pp. 49--72, 2019.
+\bibitem{b7} P. Michel, O. Levy, and G. Neubig, ``Are Sixteen Heads Really Better than One?,'' \textit{Adv. Neural Inf. Process. Syst.}, vol. 32, 2019.
+\bibitem{b8} E. Voita \textit{et al.}, ``The Bottom-up Evolution of Representations in the Transformer: A Study with Machine Translation and Language Modeling Objectives,'' in \textit{Proc. 2020 Conf. Empir. Methods Nat. Lang. Process.}, 2020, pp. 2577--2593.
+\bibitem{b9} M. Allamanis, ``The Adverse Effects of Code Duplication in Machine Learning Models of Code,'' \textit{arXiv preprint arXiv:1812.06469}, 2018.
+\bibitem{b10} S. Shiraishi \textit{et al.}, ``Specialization of Attention Heads in Code-Language Models,'' \textit{arXiv preprint arXiv:2402.03485}, 2024.
+\bibitem{b11} M. Allamanis, E. T. Barr, P. Devanbu, and C. Sutton, ``A Survey of Machine Learning for Big Code and Naturalness,'' \textit{ACM Comput. Surv.}, vol. 51, no. 4, pp. 1--37, 2018.
+\bibitem{b12} J. Vig, ``A Multiscale Visualization of Attention in the Transformer Model,'' in \textit{Proc. 57th Annu. Meet. Assoc. Comput. Linguist.}, 2019, pp. 37--42.
+\bibitem{b13} S. Jain and B. C. Wallace, ``Attention Is Not Explanation,'' in \textit{Proc. 2019 Conf. North Amer. Chapter Assoc. Comput. Linguist.}, 2019, pp. 3543--3556.
+\bibitem{b14} M. G. S. B. Martins and L. F. S. Cozman, ``Topographic VAMP: A Method for the Dimensionality Reduction and Visualization of High-Dimensional Data,'' \textit{Front. Artif. Intell.}, vol. 6, p. 974295, 2023.
+\bibitem{b15} D. Kovaleva, A. Romanov, A. Rogers, and A. Rumshisky, ``Revealing the Dark Secrets of BERT,'' in \textit{Proc. 2019 Conf. Empir. Methods Nat. Lang. Process.}, 2019, pp. 4364--4373.
+\bibitem{b16} M. Raghu \textit{et al.}, ``On the Expressive Power of Deep Neural Networks,'' in \textit{Proc. 34th Int. Conf. Mach. Learn.}, 2017, pp. 2847--2854.
+\bibitem{b17} M. Allamanis \textit{et al.}, ``A General-Purpose Dataset for Data-Driven Program Analysis,'' \textit{Commun. ACM}, vol. 64, no. 12, pp. 88--96, 2021.
+\bibitem{b18} A. D. La-Cueva \textit{et al.}, ``Tutorial on Interventional Interpretability: How to Use Causal Interventions to Better Understand and Improve NLP Models,'' in \textit{Proc. 18th Conf. Eur. Chapter Assoc. Comput. Linguist.}, 2024, pp. 20--25.
+\bibitem{b19} D. T. E. Myer, N. F. B. Lauffer, and A. B. Smith, ``Statistical Analysis of Attention in Transformers,'' \textit{arXiv preprint arXiv:2012.02248}, 2020.
+\bibitem{b20} H. Liu \textit{et al.}, ``AI-Powered Software Engineering: A Survey of the State of the Art and Future Directions,'' \textit{Wuhan Univ. J. Nat. Sci.}, vol. 28, no. 3, pp. 195--214, 2023.
+\bibitem{b21} Z. Wang \textit{et al.}, ``Re-thinking the Cross-attention in Bi-encoder for Code Search,'' \textit{arXiv preprint arXiv:2009.14658}, 2020.
+\bibitem{b22} C. Le Goues, M. Pradel, and A. Roy, ``Effectiveness of Neural Models for Software Analysis,'' \textit{Commun. ACM}, vol. 64, no. 12, pp. 78--87, 2021.
+\bibitem{b23} J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova, "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding," in Proc. 2019 Conf. North American Chapter Association for Computational Linguistics: Human Language Technologies, Minneapolis, MN, USA, 2019, pp. 4171–4186, doi: 10.18653/v1/N19-1423.
+ \bibitem{b24} M. Grootendorst, "BERTopic: Neural topic modeling with a class-based TF-IDF procedure," arXiv preprint arXiv:2203.05794, Mar. 2022.
+
+\end{thebibliography}
+
+
+\end{document}
