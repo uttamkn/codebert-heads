@@ -16,9 +16,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.cluster import KMeans
 import matplotlib.colors as mcolors
+import random
 from tqdm import tqdm
 from dotenv import load_dotenv
 
+random.seed(42)
 load_dotenv()
 
 
@@ -184,6 +186,7 @@ def ask_gemini_to_infer_cluster_description(cluster_pairs, n_clusters):
 
     LIMIT = 25
     for i in range(n_clusters):
+        random.shuffle(cluster_pairs[i])
         user_prompt += f"cluster_{i + 1}:\n\n"
         user_prompt += "\n\n".join(
             [f"Query: {c[0]}\nCode: {c[1]}" for c in cluster_pairs[i][:LIMIT]]
