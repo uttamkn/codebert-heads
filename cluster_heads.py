@@ -13,6 +13,7 @@ from crossbert import (
     ModelConfig,
 )
 import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.cluster import KMeans
 import matplotlib.colors as mcolors
 from tqdm import tqdm
@@ -141,6 +142,35 @@ def get_corresponding_pairs(labels, n_clusters, language="python"):
         cluster_to_pairs[label].append(pairs[i])
 
     return cluster_to_pairs
+
+
+def get_avg_attn_scores(labels, data, n_clusters):
+    cluster_to_attn = [[] for _ in range(n_clusters)]
+    for i, label in enumerate(labels):
+        cluster_to_attn[label].append(data[i])
+
+    avg_attn_scores = []
+    for cluster in cluster_to_attn:
+        avg_attn_scores.append(np.mean(cluster, axis=0))
+
+    print(f"avg_attn_scores shape: {np.array(avg_attn_scores).shape}")
+    return avg_attn_scores
+
+
+def visualize_avg_attn_scores(avg_attn_scores, output_dir="cluster_heads"):
+    if not avg_attn_scores:
+        print("No average attention scores to visualize.")
+        return
+    for i, scores in enumerate(avg_attn_scores):
+        scores = scores.reshape(12, 12)
+        plt.figure(figsize=(10, 6))
+        sns.heatmap(scores, annot=True, fmt=".2f", cmap="viridis", cbar=True)
+        plt.title(f"Average Attention Scores for Cluster {i + 1}")
+        plt.xlabel("Attention Head Index")
+        plt.ylabel("Attention Layer Index")
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, f"avg_attn_scores_cluster_{i + 1}.png"))
+        plt.close()
 
 
 def ask_gemini_to_infer_cluster_description(cluster_pairs, n_clusters):
@@ -295,6 +325,8 @@ def main():
         print(f"Running K-means clustering with {args.n_clusters} clusters...")
         labels = cluster_heads_kmeans(data, args.n_clusters, new_dim_size=args.dim_size)
         visualize_clusters(data, labels, args.n_clusters)
+        avg_attn_scores = get_avg_attn_scores(labels, data, args.n_clusters)
+        visualize_avg_attn_scores(avg_attn_scores, output_dir=args.output_dir)
         print(
             f"Clustering visualization saved to {os.path.join(args.output_dir, 'kmeans.png')}"
         )

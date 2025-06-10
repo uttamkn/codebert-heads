@@ -158,7 +158,7 @@ class AttentionAnalyzer:
                 for k in range(num_heads):
                     matrix = attention_data[j][i][k]
                     cross = self.cross_model_attn(matrix, sep_indices[i])
-                    q2c_curr_mean.append(cross["query_to_code"])
+                    q2c_curr_mean.append(cross["query_to_code_max"])
             q2c_means[i] = np.array(q2c_curr_mean)
 
         return q2c_means
